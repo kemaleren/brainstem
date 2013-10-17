@@ -1,43 +1,104 @@
 from __future__ import division
 
+import os
+from cPickle import dump, load
+
 import glymur
 
 import numpy as np
 
 from scipy.stats import poisson
 from scipy import ndimage
+from scipy import misc
 
 import sklearn.decomposition as decomp
 
-from skimage.filter import threshold_otsu
+from skimage.filter import threshold_otsu, threshold_adaptive
+from skimage.morphology import binary_dilation, binary_erosion
 from skimage.color import label2rgb
 from skimage.morphology import watershed
 from skimage.feature import peak_local_max
 
-jpimg = glymur.Jp2k('../data/images/example.jp2')
-img = jpimg.read(rlevel=1)
-img = img[4000:6000, 3000:img.shape[1] / 2, :]  # approximately symmetric
+DATA_DIR = "/Users/keren/devel/data/images/PMD1305_N"
+CACHE_DIR = "/Users/keren/devel/data/cache"
+CACHE_PATH = os.path.join(CACHE_DIR, 'cache.pkl')
 
-pca = decomp.PCA(1)
-img = pca.fit_transform(img.reshape(-1, 3)).reshape(img.shape[:2])
-img = (img - img.min()) / (img.max() - img.min())
+if not os.path.exists(CACHE_DIR):
+    os.mkdir(CACHE_DIR)
+if not os.path.isdir(CACHE_DIR):
+    raise Exception('path is not a directory: {}'.format(CACHE_DIR))
+try:
+    CACHE = load(file(CACHE_PATH, 'rb'))
+except IOError:
+    CACHE = {}
 
-# # global threshold and watershed
-# binary = img < threshold_otsu(img)
-# distance = ndimage.distance_transform_edt(binary)
-# local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)), labels=binary)
-# markers = ndimage.label(local_maxi)[0]
-# labels = watershed(-distance, markers, mask=binary)
-# labeled_img = label2rgb(labels, img, bg_label=0)
+def get_file_names():
+    filenames = os.listdir(DATA_DIR)
+    filenames = list(n for n in filenames if os.path.splitext(n)[1] == '.jp2')
+    filenames = sorted(filenames, key=lambda n: n.split('_')[-1])
+    return filenames
 
-# local threshold and erosion / dilation
-t_img = threshold_adaptive(img, 25, offset=.01)
-b_img = m.binary_erosion(-t_img, np.ones((3, 3)))
-d_img = m.binary_dilation(b_img, np.ones((3, 3)))
-labels, _ = ndimage.label(d_img)
-labeled = label2rgb(labels, img, bg_label=0)
 
-# finding bounding box of brain in a slice
-small_img = jpimg.read(rlevel=4)
-blurred = gaussian_filter(small_img, 10)
-ndimage.measurements.find_objects(blurred < threshold_otsu(blurred))
+def read_img(filename, rlevel):
+    jpimg = glymur.Jp2k(os.path.join(DATA_DIR, filename))
+    return jpimg.read(rlevel=rlevel)
+
+
+def get_img(filename, rlevel):
+    try:
+        fname = CACHE[(filename, rlevel)]
+        return misc.imread(fname)
+    except:
+        img = read_img(filename, rlevel)
+        cache_file = os.path.join(CACHE_DIR, "{}_rlevel_{}.tif".format(filename, rlevel))
+        misc.imsave(cache_file, img)
+        CACHE[(filename, rlevel)] = cache_file
+        dump(CACHE, open(CACHE_PATH, 'wb'))
+        return img
+
+
+def make_grey(img):
+    pca = decomp.PCA(1)
+    img = pca.fit_transform(img.reshape(-1, 3)).reshape(img.shape[:2])
+    return (img - img.min()) / (img.max() - img.min())
+
+
+def get_cutout(filename):
+    # find bounding box of brain in a slice
+    small_img = get_img(filename, rlevel=4)
+    small_img = make_grey(small_img)
+    blurred = ndimage.gaussian_filter(small_img, 10)
+    slc = ndimage.measurements.find_objects(blurred < threshold_otsu(blurred))[0]
+    x_slc = slice(slc[0].start * 2 ** 3, slc[0].stop * 2 ** 3)
+    y_slc = slice(slc[1].start * 2 ** 3, slc[1].stop * 2 ** 3)
+    img = get_img(filename, rlevel=1)
+    return img[x_slc, y_slc]
+
+
+def make_sample(img, scale=5):
+    x_shape = int(np.floor(img.shape[0] / scale))
+    y_shape = int(np.floor(img.shape[1] / scale))
+    x_start = np.random.randint(0, img.shape[0] - x_shape)
+    y_start = np.random.randint(0, img.shape[1] - y_shape)
+
+    return img[x_start : x_start + x_shape,
+               y_start : y_start + y_shape]
+    
+
+def segment_cells(img):
+    # # global threshold and watershed
+    # binary = img < threshold_otsu(img)
+    # distance = ndimage.distance_transform_edt(binary)
+    # local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)), labels=binary)
+    # markers = ndimage.label(local_maxi)[0]
+    # labels = watershed(-distance, markers, mask=binary)
+    # labeled_img = label2rgb(labels, img, bg_label=0)
+
+    # local threshold and erosion / dilation
+    img = make_grey(img)
+    t_img = threshold_adaptive(img, 25, offset=.01)
+    b_img = binary_erosion(-t_img, np.ones((3, 3)))
+    d_img = binary_dilation(b_img, np.ones((3, 3)))
+    labels, _ = ndimage.label(d_img)
+    return label2rgb(labels, img, bg_label=0)
+
