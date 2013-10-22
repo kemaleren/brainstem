@@ -2,6 +2,29 @@ from __future__ import division
 
 import numpy as np
 
+
+def sample_points(contour, n_points=100):
+    """Sample points along the given contour."""
+    pass
+
+
+def chi_square_distance(x, y):
+    """Chi-square histogram distance.
+
+    Ignores bins with no elements.
+
+
+    """
+    idx = (x + y != 0)
+    x = x[idx]
+    y = y[idx]
+    x = x / x.max()
+    y = y / y.max()
+    num = np.power(x - y, 2)
+    denom = x + y
+    return (num / denom).sum() / 2
+    
+
 def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
     """Compute shape context descriptors for all given points.
 
