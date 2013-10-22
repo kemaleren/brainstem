@@ -1,28 +1,12 @@
 from __future__ import division
 
 import numpy as np
+import scipy.stats
 
 
 def sample_points(contour, n_points=100):
     """Sample points along the given contour."""
     pass
-
-
-def chi_square_distance(x, y):
-    """Chi-square histogram distance.
-
-    Ignores bins with no elements.
-
-
-    """
-    idx = (x + y != 0)
-    x = x[idx]
-    y = y[idx]
-    x = x / x.max()
-    y = y / y.max()
-    num = np.power(x - y, 2)
-    denom = x + y
-    return (num / denom).sum() / 2
     
 
 def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
@@ -89,4 +73,110 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
             if r_idx != -1 and theta_idx != -1:
                 result[r_idx, theta_idx] += 1
     return result
+
+
+def chi_square_distance(x, y):
+    """Chi-square histogram distance.
+
+    Ignores bins with no elements.
+
+    """
+    idx = (x + y != 0)
+    x = x[idx]
+    y = y[idx]
+    x = x / x.max()
+    y = y / y.max()
+    num = np.power(x - y, 2)
+    denom = x + y
+    return (num / denom).sum() / 2
+
+
+def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
+    """Computes the distance between two shapes.
+
+    Uses dynamic programming to find best alignment of sampled points.
+    Assumes point sequences are alignable (i.e. they do not need to be
+    rotated.)
+
+    """
+    assert a_descriptors.ndim == 3
+    assert b_descriptors.ndim == 3
+    assert a_descriptors.shape[1:] == b_descriptors.shape[1:]
+
+    n_rows = a_descriptors.shape[0]
+    n_cols = b_descriptors.shape[0]
+
+    a_descriptors = a_descriptors.reshape(n_rows, -1)
+    b_descriptors = b_descriptors.reshape(n_rows, -1)
+
+    table = np.zeros((n_rows, n_cols))
+
+    d = lambda i, j: chi_square_distance(a_descriptors[i],
+                                         b_descriptors[j])
+
+    # initialize outer elements
+    table[0, 0] = d(0, 0)
+
+    for i in range(1, n_rows):
+        match = i * penalty + d(i, 0)
+        mismatch = table[i - 1, 0] + penalty
+        table[i, 0] = min(match, mismatch)
+
+    for j in range(1, n_cols):
+        match = j * penalty + d(0, j)
+        mismatch = table[0, j - 1] + penalty
+        table[i, 0] = min(match, mismatch)
+
+    # fill in the rest of the table
+    for i in range(1, n_rows):
+        for j in range(1, n_cols):
+            match = table[i - 1, j - 1] + d(i, j)
+            mismatch = min(table[i - 1, j],
+                           table[i, j - 1]) + penalty
+            table[i, j] = min(match, mismatch)
+
+    # tracing optimal alignment is not necessary. we are just
+    # interested in the final cost.
+    return table[-1, -1]
             
+
+def dists_to_affinities(dists, neighbors=10, alpha=0.27):
+    """Compute an affinity matrix for a distance matrix."""
+    affinities = np.zeros_like(dists)
+    sorted_rows = np.sort(dists, axis=1)
+    for i in range(dists.shape[0]):
+        for j in range(i, dists.shape[1]):
+            sigma = np.mean(sorted_rows[i, 1:neighbors],
+                            sorted_rows[j, 1:neighbors])
+            sim = scipy.stats.norm.pdf(dists[i, j], loc=0, scale=alpha * sigma)
+            affinities[i, j] = sim
+            affinities[j, i] = sim
+
+    # normalize each row
+    return affinities / affinities.sum(axis=1)
+
+
+def graph_transduction(i, affinities, max_iters=5000):
+    """Compute new affinities for a query based on graph transduction.
+
+    The ``i``th element of ``affinities`` is the query; the rest are its
+    candidate matches.
+
+    """
+    f = np.zeros((affinities.shape[0], 1))
+    f[i] = 1
+    for _ in range(max_iters):
+        f = np.dot(affinities, f)
+        f[i] = 1
+    return f.ravel()
+    
+
+# TODO: for each shape, retrieve its nearest neighbors and only do
+# graph transduction on them.
+
+def compute_new_affinities(affinities):
+    """Computes all new pairwise affinities by graph transduction."""
+    result = list(graph_transduction(i, affinities) for i in range(affinities.shape[0]))
+    # TODO: is the result symmetric?
+    assert (affinities.transpose(1, 0, 2) == affinities).all()
+    return np.vstack(affinities)
