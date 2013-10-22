@@ -4,10 +4,39 @@ import numpy as np
 import scipy.stats
 
 
-def sample_points(contour, n_points=100):
-    """Sample points along the given contour."""
-    pass
-    
+def sample_points(img, n_points=100):
+    """Sample points along an edge.
+
+    Returns an array of shape ``(n_points, 2)``, where ``points[i,
+    j]`` is in cartesian coordinates.
+
+    """
+    # FIXME: ensure in order along edge
+    # TODO: ensure uniformly spaced
+    assert img.ndim == 2
+    x, y = np.nonzero(img)
+    points = np.hstack((y.reshape(-1, 1),
+                        len(img) - x.reshape(-1, 1)))
+    if len(points) < n_points:
+        return points
+    idx = np.random.choice(len(points), n_points)
+    return points[idx]
+
+
+def euclidean_dists_angles(points):
+    """Returns symmetric ``dists`` and ``angles`` arrays."""
+    # TODO: rotation invariance; compute angles relative to tangent
+    n = len(points)
+    dists = np.zeros((n, n))
+    angles = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i + 1, n):
+            diff = points[i] - points[j]
+            dists[i, j] = dists[j, i] = np.linalg.norm(diff, ord=2)
+            angles[i, j] = np.arctan2(*diff[::-1])
+            angles[j, i] = np.arctan2(*(-diff)[::-1])
+    return dists, angles
+
 
 def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
     """Compute shape context descriptors for all given points.
@@ -42,13 +71,13 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
     assert dists.ndim == 2
     assert dists.shape == angles.shape
 
-    # ensure distances and angles are symmetric
-    assert (dists.transpose(1, 0, 2) == dists).all()
-    assert (angles.transpose(1, 0, 2) == angles).all()
+    # ensure distances are symmetric
+    assert (dists.T == dists).all()
 
     n_points = dists.shape[0]
 
-    r_array = np.logspace(0, 1, n_radial_bins + 1, base=10) / 10.0
+    r_array = np.logspace(0, 1, n_radial_bins, base=10) / 10.0
+    r_array = np.hstack(([0], r_array))
     theta_array = np.linspace(-np.pi, np.pi, n_polar_bins + 1)
     result = np.zeros((n_points, n_radial_bins, n_polar_bins),
                       dtype=np.int)
@@ -64,14 +93,19 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
                 return idx
         if i == bins[idx + 1]:
             return idx
-        return -1
+        raise Exception('{} does not fit in any bin in {}.'
+                        ' this should never happen.'.format(i, bins))
 
     for i in range(n_points):
-        for j in range(i + 1, n_points):
+        for j in range(n_points):
+            if i == j:
+                continue
             r_idx = get_idx(dists[i, j], r_array)
             theta_idx = get_idx(angles[i, j], theta_array)
             if r_idx != -1 and theta_idx != -1:
-                result[r_idx, theta_idx] += 1
+                result[i, r_idx, theta_idx] += 1
+    # ensure all points were counted
+    assert (result.reshape(n_points, -1).sum(axis=1) == (n_points - 1)).all()
     return result
 
 
@@ -178,5 +212,5 @@ def compute_new_affinities(affinities):
     """Computes all new pairwise affinities by graph transduction."""
     result = list(graph_transduction(i, affinities) for i in range(affinities.shape[0]))
     # TODO: is the result symmetric?
-    assert (affinities.transpose(1, 0, 2) == affinities).all()
+    assert (affinities.T == affinities).all()
     return np.vstack(affinities)
