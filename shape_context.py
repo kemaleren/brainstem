@@ -28,17 +28,18 @@ def sample_points(img, n_points=100, multiplier=3):
     n_sample_points = min(n_points * multiplier, len(points))
     idx = np.random.choice(len(points), n_sample_points)
     points = points[idx]
-    n_total_points = len(points)
+
+    idx = np.arange(len(points))
 
     # remove points closest to each other
     dists = distance.squareform(distance.pdist(points))
-    dists = np.ma.masked_array(dists, mask=np.diag(np.ones(n_total_points)))
-    while np.sqrt(dists.count() + n_total_points) > n_points:
+    np.fill_diagonal(dists, np.finfo(dists.dtype).max)
+    while len(dists) > n_points:
         p1, p2 = np.unravel_index(dists.argmin(), dims=dists.shape)
         victim = np.random.choice((p1, p2))
-        dists[victim] = np.ma.masked
-        dists[:, victim] = np.ma.masked
-    idx = np.unique(np.nonzero(-dists.mask)[0])        
+        dists = np.delete(dists, victim, axis=0)
+        dists = np.delete(dists, victim, axis=1)
+        idx = np.delete(idx, victim)
     return points[idx]
 
 
