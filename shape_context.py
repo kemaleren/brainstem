@@ -2,24 +2,43 @@ from __future__ import division
 
 import numpy as np
 import scipy.stats
+import scipy.spatial.distance as distance
 
 
-def sample_points(img, n_points=100):
+def sample_points(img, n_points=100, multiplier=3):
     """Sample points along an edge.
+
+    Uses rejection sampling to get points uniformly distributed along
+    edges.
 
     Returns an array of shape ``(n_points, 2)``, where ``points[i,
     j]`` is in cartesian coordinates.
 
     """
     # FIXME: ensure in order along edge
-    # TODO: ensure uniformly spaced
     assert img.ndim == 2
+    assert n_points > 0
     x, y = np.nonzero(img)
     points = np.hstack((y.reshape(-1, 1),
                         len(img) - x.reshape(-1, 1)))
     if len(points) < n_points:
         return points
-    idx = np.random.choice(len(points), n_points)
+
+    # sample n_points * multiplier
+    n_sample_points = min(n_points * multiplier, len(points))
+    idx = np.random.choice(len(points), n_sample_points)
+    points = points[idx]
+    n_total_points = len(points)
+
+    # remove points closest to each other
+    dists = distance.squareform(distance.pdist(points))
+    dists = np.ma.masked_array(dists, mask=np.diag(np.ones(n_total_points)))
+    while np.sqrt(dists.count() + n_total_points) > n_points:
+        p1, p2 = np.unravel_index(dists.argmin(), dims=dists.shape)
+        victim = np.random.choice((p1, p2))
+        dists[victim] = np.ma.masked
+        dists[:, victim] = np.ma.masked
+    idx = np.unique(np.nonzero(-dists.mask)[0])        
     return points[idx]
 
 
