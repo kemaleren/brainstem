@@ -1,46 +1,98 @@
 from __future__ import division
 
+from collections import defaultdict
+import itertools
+
 import numpy as np
 import scipy.stats
-import scipy.spatial.distance as distance
+from scipy import ndimage
+
+from skimage.segmentation import find_boundaries
 
 
-def sample_points(img, n_points=100, multiplier=3):
-    """Sample points along an edge.
+def pixel_graph(img):
+    """ Create an 8-way pixel connectivity graph for a binary image."""
+    m, n = img.shape
+    adj = defaultdict(set)
+    # TODO: repeated effort
+    for i in range(1, m - 1):
+        for j in range(1, n - 1):
+            for imod in (-1, 0, 1):
+                for jmod in (-1, 0, 1):
+                    if i + imod < 0 or j + jmod < 0:
+                        continue
+                    if i + imod >= m or j + jmod >= n:
+                        continue
+                    if imod == jmod == 0:
+                        continue
+                    if img[i, j] and img[i + imod, j + jmod]:
+                        adj[i, j].add((i + imod, j + jmod))
+                        adj[i + imod, j + jmod].add((i, j))
+    return adj
+
+
+def _sample_single_contour(img, n_points):
+    """Samples pixels in order."""
+    # Right now, just does a depth-first search. This is not optimal
+    # because backtracking can put some pixels very far out of
+    # order. a better approach would be to find a locally stable
+    # sorting.
+    graph = pixel_graph(img)
+    visited = set()
+    unvisited = set(graph.keys())
+    stacked = set()
+    stack = []
+    order = []
+    while unvisited:
+        assert len(visited) + len(unvisited) == len(graph)
+        try:
+            node = stack.pop()
+        except:
+            node = min(unvisited)
+        assert not node in visited
+        order.append(node)
+        visited.add(node)
+        unvisited.remove(node)
+        neighbors = graph[node]
+        for n in neighbors - stacked - visited:
+            stack.append(n)
+            stacked.add(n)
+        assert len(visited) + len(unvisited) == len(graph)
+        assert len(visited & unvisited) == 0
+    assert len(order) == len(graph)
+    stride = int(np.ceil(len(order) / n_points))
+    return order[::stride]
+
+
+def sample_points(img, n_points=100):
+    """Sample points along edges in a binary image.
 
     Uses rejection sampling to get points uniformly distributed along
     edges.
 
-    Returns an array of shape ``(n_points, 2)``, where ``points[i,
-    j]`` is in cartesian coordinates.
+    Returns an array of shape ``(n_points, 2)`` in image coordinages.
 
     """
-    # FIXME: ensure in order along edge
+    # FIXME: what if contour crosses itself? for example: an infinity
+    # symbol?
+    # TODO: test with a shape with holes, such as a dougnut.
     assert img.ndim == 2
     assert n_points > 0
-    x, y = np.nonzero(img)
-    points = np.hstack((y.reshape(-1, 1),
-                        len(img) - x.reshape(-1, 1)))
-    if len(points) < n_points:
-        return points
 
-    # sample n_points * multiplier
-    n_sample_points = min(n_points * multiplier, len(points))
-    idx = np.random.choice(len(points), n_sample_points)
-    points = points[idx]
+    boundaries = find_boundaries(img)
 
-    idx = np.arange(len(points))
+    # reorder along curves; account for holes and disconnected lines
+    # with connected components.
+    labels, n_curves = ndimage.label(boundaries, structure=np.ones((3, 3)))
 
-    # remove points closest to each other
-    dists = distance.squareform(distance.pdist(points))
-    np.fill_diagonal(dists, np.finfo(dists.dtype).max)
-    while len(dists) > n_points:
-        p1, p2 = np.unravel_index(dists.argmin(), dims=dists.shape)
-        victim = np.random.choice((p1, p2))
-        dists = np.delete(dists, victim, axis=0)
-        dists = np.delete(dists, victim, axis=1)
-        idx = np.delete(idx, victim)
-    return points[idx]
+    # sample a linear subset of each connected curve
+    samples = list(_sample_single_contour(labels == lab + 1, n_points)
+                   for lab in range(n_curves))
+
+    # TODO: rearrange in order of smallest point in each curve and append
+
+    points = list(itertools.chain(*samples))
+    return np.vstack(points)
 
 
 def euclidean_dists_angles(points):
