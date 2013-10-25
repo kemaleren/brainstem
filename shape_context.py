@@ -8,13 +8,14 @@ import scipy.stats
 from scipy import ndimage
 
 from skimage.segmentation import find_boundaries
+from skimage.morphology import skeletonize
 
 
 def pixel_graph(img):
     """ Create an 8-way pixel connectivity graph for a binary image."""
     m, n = img.shape
     adj = defaultdict(set)
-    # TODO: repeated effort
+    # TODO: inelegant; repeated effort
     for i in range(1, m - 1):
         for j in range(1, n - 1):
             for imod in (-1, 0, 1):
@@ -36,7 +37,7 @@ def _sample_single_contour(img, n_points):
     # Right now, just does a depth-first search. This is not optimal
     # because backtracking can put some pixels very far out of
     # order. a better approach would be to find a locally stable
-    # sorting.
+    # sorting. However, this seems to work well enough for now.
     graph = pixel_graph(img)
     visited = set()
     unvisited = set(graph.keys())
@@ -79,12 +80,11 @@ def sample_points(img, n_points=100):
     assert img.ndim == 2
     assert n_points > 0
 
-    boundaries = find_boundaries(img)
-
+    boundaries = skeletonize(find_boundaries(img))
+    
     # reorder along curves; account for holes and disconnected lines
     # with connected components.
     labels, n_labels = ndimage.label(boundaries, structure=np.ones((3, 3)))
-
     n_pixels = labels.sum()
     curve_pixels = list((labels == lab + 1).sum() for lab in range(n_labels))
     curve_n_points = list(int(np.ceil((p / n_pixels) * n_points))
@@ -93,9 +93,6 @@ def sample_points(img, n_points=100):
     # sample a linear subset of each connected curve
     samples = list(_sample_single_contour(labels == lab + 1, n)
                    for lab, n in enumerate(curve_n_points))
-
-    # TODO: rearrange in order of smallest point in each curve and append
-
     points = list(itertools.chain(*samples))
     return np.vstack(points)
 
@@ -218,7 +215,7 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
     n_cols = b_descriptors.shape[0]
 
     a_descriptors = a_descriptors.reshape(n_rows, -1)
-    b_descriptors = b_descriptors.reshape(n_rows, -1)
+    b_descriptors = b_descriptors.reshape(n_cols, -1)
 
     table = np.zeros((n_rows, n_cols))
 
@@ -291,3 +288,15 @@ def compute_new_affinities(affinities):
     # TODO: is the result symmetric?
     assert (affinities.T == affinities).all()
     return np.vstack(affinities)
+
+
+def full_shape_distance(img1, img2):
+    points1 = sample_points(img1)
+    dists1, angles1 = euclidean_dists_angles(points1)
+    descriptors1 = shape_context(dists1, angles1)
+
+    points2 = sample_points(img2)
+    dists2, angles2 = euclidean_dists_angles(points2)
+    descriptors2 = shape_context(dists2, angles2)
+
+    return shape_distance(descriptors1, descriptors2)
