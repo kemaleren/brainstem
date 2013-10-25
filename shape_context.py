@@ -83,11 +83,16 @@ def sample_points(img, n_points=100):
 
     # reorder along curves; account for holes and disconnected lines
     # with connected components.
-    labels, n_curves = ndimage.label(boundaries, structure=np.ones((3, 3)))
+    labels, n_labels = ndimage.label(boundaries, structure=np.ones((3, 3)))
+
+    n_pixels = labels.sum()
+    curve_pixels = list((labels == lab + 1).sum() for lab in range(n_labels))
+    curve_n_points = list(int(np.ceil((p / n_pixels) * n_points))
+                          for p in curve_pixels)
 
     # sample a linear subset of each connected curve
-    samples = list(_sample_single_contour(labels == lab + 1, n_points)
-                   for lab in range(n_curves))
+    samples = list(_sample_single_contour(labels == lab + 1, n)
+                   for lab, n in enumerate(curve_n_points))
 
     # TODO: rearrange in order of smallest point in each curve and append
 
