@@ -33,7 +33,22 @@ def pixel_graph(img):
 
 
 def _sample_single_contour(img, n_points):
-    """Samples pixels in order."""
+    """Samples pixels, in order, along a contour.
+
+    Parameters
+    ----------
+    img : np.ndarray
+        A binary image with nonzero elements along a connected
+        contour.
+    n_points : the number of points to return
+
+    Returns
+    -------
+    points : list of tuples
+        An ordered list of (x, y) points, starting from the point
+        closest to the origin.
+
+    """
     # Right now, just does a depth-first search. This is not optimal
     # because backtracking can put some pixels very far out of
     # order. a better approach would be to find a locally stable
@@ -49,6 +64,7 @@ def _sample_single_contour(img, n_points):
         try:
             node = stack.pop()
         except:
+            # TODO: this is not actually closest to the origin
             node = min(unvisited)
         assert not node in visited
         order.append(node)
@@ -68,20 +84,20 @@ def _sample_single_contour(img, n_points):
 def sample_points(img, n_points=100):
     """Sample points along edges in a binary image.
 
-    Uses rejection sampling to get points uniformly distributed along
-    edges.
+    Returns an array of shape ``(n_points, 2)`` in image coordinates.
 
-    Returns an array of shape ``(n_points, 2)`` in image coordinages.
+    If there are several disconnected contours, they are sampled
+    seperately and appended in order of their minimum distance to the
+    origin of ``img`` in NumPy array coordinates.
 
     """
     # FIXME: what if contour crosses itself? for example: an infinity
     # symbol?
-    # TODO: test with a shape with holes, such as a dougnut.
     assert img.ndim == 2
     assert n_points > 0
 
     boundaries = skeletonize(find_boundaries(img))
-    
+
     # reorder along curves; account for holes and disconnected lines
     # with connected components.
     labels, n_labels = ndimage.label(boundaries, structure=np.ones((3, 3)))
@@ -93,20 +109,24 @@ def sample_points(img, n_points=100):
     # sample a linear subset of each connected curve
     samples = list(_sample_single_contour(labels == lab + 1, n)
                    for lab, n in enumerate(curve_n_points))
+
+    # append them together. They should be in order, because
+    # ndimage.label() labels in order.
     points = list(itertools.chain(*samples))
     return np.vstack(points)
 
 
 def euclidean_dists_angles(points):
-    """Returns symmetric ``dists`` and ``angles`` arrays."""
+    """Returns symmetric pairwise ``dists`` and ``angles`` arrays."""
     # TODO: rotation invariance; compute angles relative to tangent
     n = len(points)
-    dists = np.zeros((n, n))
+    dists = scipy.spatial.distance.pdist(points, 'euclidean')
+    dists = scipy.spatial.distance.squareform(dists)
+    # TODO: can we do angles with scipy too?
     angles = np.zeros((n, n))
     for i in range(n):
         for j in range(i + 1, n):
             diff = points[i] - points[j]
-            dists[i, j] = dists[j, i] = np.linalg.norm(diff, ord=2)
             angles[i, j] = np.arctan2(*diff[::-1])
             angles[j, i] = np.arctan2(*(-diff)[::-1])
     return dists, angles
@@ -133,7 +153,7 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
 
     n_polar_bins : int
         number of polar bins in histogram
-    
+
     Returns
     -------
     shape_contexts : ndarray
@@ -184,7 +204,7 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
 
 
 def chi_square_distance(x, y):
-    """Chi-square histogram distance.
+    """Chi-square histogram distance between vectors ``x`` and ``y``.
 
     Ignores bins with no elements.
 
@@ -202,11 +222,16 @@ def chi_square_distance(x, y):
 def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
     """Computes the distance between two shapes.
 
+    The distance is defined as the minimal cost of aligning an ordered
+    sequence of shape context descriptors along their contours. For
+    more information, see Ling and Jacobs, 2007.
+
     Uses dynamic programming to find best alignment of sampled points.
-    Assumes point sequences are alignable (i.e. they do not need to be
-    rotated.)
 
     """
+    # FIXME: Assumes the sequences start from the correct position
+    # TODO: this could probably be optimized.
+
     assert a_descriptors.ndim == 3
     assert b_descriptors.ndim == 3
     assert a_descriptors.shape[1:] == b_descriptors.shape[1:]
@@ -246,10 +271,23 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
     # tracing optimal alignment is not necessary. we are just
     # interested in the final cost.
     return table[-1, -1]
-            
+
+
+def full_shape_distance(img1, img2):
+    """A convenience function to compute the distance between two binary images."""
+    points1 = sample_points(img1)
+    dists1, angles1 = euclidean_dists_angles(points1)
+    descriptors1 = shape_context(dists1, angles1)
+
+    points2 = sample_points(img2)
+    dists2, angles2 = euclidean_dists_angles(points2)
+    descriptors2 = shape_context(dists2, angles2)
+
+    return shape_distance(descriptors1, descriptors2)
+
 
 def dists_to_affinities(dists, neighbors=10, alpha=0.27):
-    """Compute an affinity matrix for a distance matrix."""
+    """Compute an affinity matrix for a given distance matrix."""
     affinities = np.zeros_like(dists)
     sorted_rows = np.sort(dists, axis=1)
     for i in range(dists.shape[0]):
@@ -270,6 +308,9 @@ def graph_transduction(i, affinities, max_iters=5000):
     The ``i``th element of ``affinities`` is the query; the rest are its
     candidate matches.
 
+    Method as described in "Learning context-sensitive shape
+    similarity by graph transduction." by Bai, Yang, et. al. (2010).
+
     """
     f = np.zeros((affinities.shape[0], 1))
     f[i] = 1
@@ -277,7 +318,7 @@ def graph_transduction(i, affinities, max_iters=5000):
         f = np.dot(affinities, f)
         f[i] = 1
     return f.ravel()
-    
+
 
 # TODO: for each shape, retrieve its nearest neighbors and only do
 # graph transduction on them.
@@ -288,15 +329,3 @@ def compute_new_affinities(affinities):
     # TODO: is the result symmetric?
     assert (affinities.T == affinities).all()
     return np.vstack(affinities)
-
-
-def full_shape_distance(img1, img2):
-    points1 = sample_points(img1)
-    dists1, angles1 = euclidean_dists_angles(points1)
-    descriptors1 = shape_context(dists1, angles1)
-
-    points2 = sample_points(img2)
-    dists2, angles2 = euclidean_dists_angles(points2)
-    descriptors2 = shape_context(dists2, angles2)
-
-    return shape_distance(descriptors1, descriptors2)
