@@ -8,9 +8,16 @@ Right now there are two modules. The first reads images and thresholds them. It 
 ```python
 import brainstem
 
+# get all available data files
 all_data_files = brainstem.get_filenames()
+
+# read the first from disk, cutting out the background
 img = brainstem.get_cutout(all_data_files[0])
+
+# sample a random subset of it (for speed)
 sub_img = brainstem.random_image_sample(img)
+
+# segment the cells
 labeled_img = brainstem.segment_cells(sub_img, rgb=True)
 ````
 
