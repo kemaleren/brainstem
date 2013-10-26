@@ -231,6 +231,7 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
     """
     # FIXME: Assumes the sequences start from the correct position
     # TODO: this could probably be optimized.
+    # TODO: write a visualization of the alignment found in this function.
 
     assert a_descriptors.ndim == 3
     assert b_descriptors.ndim == 3
