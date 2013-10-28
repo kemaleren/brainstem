@@ -3,6 +3,10 @@ Brainstem project
 
 Some useful code for the brainstem project. Parts of this project will be incorporated into [this project](https://github.com/mistycheney/registration).
 
+Before using it, it is necessary to build the Cython modules in place:
+
+    python setup.py build_ext --inplace
+
 Right now there are two modules. The first reads images and thresholds them. It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
 
 ```python
