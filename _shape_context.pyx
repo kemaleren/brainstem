@@ -3,12 +3,33 @@
 #cython: boundscheck=False
 # cython: wraparound=False
 
+from collections import defaultdict
 import numpy as np
 
 cimport numpy as np
 cimport cython
 
 np.import_array()
+
+
+def _pixel_graph(char[:, :] img):
+    """ Create an 8-way pixel connectivity graph for a binary image."""
+    cdef int m, n
+    cdef int i, j, imod, jmod
+    adj = defaultdict(set)
+    m = img.shape[0]
+    n = img.shape[1]
+    for i in range(1, m-1, 2):
+        for j in range(1, n-1, 2):
+            for imod in (-1, 0, 1):
+                for jmod in (-1, 0, 1):
+                    if imod == jmod == 0:
+                        continue
+                    if img[i, j] and img[i + imod, j + jmod]:
+                        adj[i, j].add((i + imod, j + jmod))
+                        adj[i + imod, j + jmod].add((i, j))
+    return adj
+
 
 def chi2_distance(long[:] x,
                   long[:] y):

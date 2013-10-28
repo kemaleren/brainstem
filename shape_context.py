@@ -1,6 +1,5 @@
 from __future__ import division
 
-from collections import defaultdict
 import itertools
 
 import numpy as np
@@ -10,23 +9,12 @@ from scipy import ndimage
 from skimage.segmentation import find_boundaries
 from skimage.morphology import skeletonize
 
-from _shape_context import chi2_distance
+from _shape_context import _pixel_graph, chi2_distance
 
 
 def pixel_graph(img):
-    """ Create an 8-way pixel connectivity graph for a binary image."""
-    m, n = img.shape
-    adj = defaultdict(set)
-    for i in range(1, m-1, 2):
-        for j in range(1, n-1, 2):
-            for imod in (-1, 0, 1):
-                for jmod in (-1, 0, 1):
-                    if imod == jmod == 0:
-                        continue
-                    if img[i, j] and img[i + imod, j + jmod]:
-                        adj[i, j].add((i + imod, j + jmod))
-                        adj[i + imod, j + jmod].add((i, j))
-    return adj
+    assert len(np.unique(img)) <= 2
+    return _pixel_graph(img.astype(np.uint8))
 
 
 def _sample_single_contour(img, n_points):
