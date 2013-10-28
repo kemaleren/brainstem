@@ -15,15 +15,10 @@ def pixel_graph(img):
     """ Create an 8-way pixel connectivity graph for a binary image."""
     m, n = img.shape
     adj = defaultdict(set)
-    # TODO: inelegant; repeated effort
-    for i in range(1, m - 1):
-        for j in range(1, n - 1):
+    for i in range(1, m-1, 2):
+        for j in range(1, n-1, 2):
             for imod in (-1, 0, 1):
                 for jmod in (-1, 0, 1):
-                    if i + imod < 0 or j + jmod < 0:
-                        continue
-                    if i + imod >= m or j + jmod >= n:
-                        continue
                     if imod == jmod == 0:
                         continue
                     if img[i, j] and img[i + imod, j + jmod]:
@@ -122,13 +117,13 @@ def euclidean_dists_angles(points):
     n = len(points)
     dists = scipy.spatial.distance.pdist(points, 'euclidean')
     dists = scipy.spatial.distance.squareform(dists)
-    # TODO: can we do angles with scipy too?
-    angles = np.zeros((n, n))
-    for i in range(n):
-        for j in range(i + 1, n):
-            diff = points[i] - points[j]
-            angles[i, j] = np.arctan2(*diff[::-1])
-            angles[j, i] = np.arctan2(*(-diff)[::-1])
+    # TODO: repeated effort to compute angles this way
+    rows = np.hstack([points] * n).reshape(n, n, 2)
+    cols = np.vstack([points] * n).reshape(n, n, 2)
+    pairs = rows - cols
+    x = pairs[:, :, 0]
+    y = pairs[:, :, 1]
+    angles = np.arctan2(y, x)
     return dists, angles
 
 
