@@ -10,6 +10,8 @@ from scipy import ndimage
 from skimage.segmentation import find_boundaries
 from skimage.morphology import skeletonize
 
+from _shape_context import chi2_distance
+
 
 def pixel_graph(img):
     """ Create an 8-way pixel connectivity graph for a binary image."""
@@ -198,22 +200,6 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
     return result
 
 
-def chi_square_distance(x, y):
-    """Chi-square histogram distance between vectors ``x`` and ``y``.
-
-    Ignores bins with no elements.
-
-    """
-    idx = (x + y != 0)
-    x = x[idx]
-    y = y[idx]
-    x = x / x.max()
-    y = y / y.max()
-    num = np.power(x - y, 2)
-    denom = x + y
-    return (num / denom).sum() / 2
-
-
 def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
     """Computes the distance between two shapes.
 
@@ -240,8 +226,10 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
 
     table = np.zeros((n_rows, n_cols))
 
-    d = lambda i, j: chi_square_distance(a_descriptors[i],
-                                         b_descriptors[j])
+    # TODO: perhaps precomputing all pairwise distances would be
+    # faster
+    d = lambda i, j: chi2_distance(a_descriptors[i],
+                                   b_descriptors[j])
 
     # initialize outer elements
     table[0, 0] = d(0, 0)
