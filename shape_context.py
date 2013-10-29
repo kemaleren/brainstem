@@ -44,13 +44,18 @@ def _sample_single_contour(img, n_points):
     stacked = set()
     stack = []
     order = []
+
+    # start from pixel closest to origin
+    x, y = np.nonzero(img)
+    start = (x[0], y[0])
+    stack.append(start)
+    
     while unvisited:
         assert len(visited) + len(unvisited) == len(graph)
         try:
             node = stack.pop()
         except:
-            # TODO: this is not actually closest to the origin
-            node = min(unvisited)
+            node = unvisited.pop()
         assert not node in visited
         order.append(node)
         visited.add(node)
@@ -188,7 +193,7 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
     Uses dynamic programming to find best alignment of sampled points.
 
     """
-    # FIXME: Assumes the sequences start from the correct position
+    # FIXME: Assumes the sequences' starting and ending points are aligned.
     # TODO: this could probably be optimized.
     # TODO: write a visualization of the alignment found in this function.
 

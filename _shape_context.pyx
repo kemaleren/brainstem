@@ -19,11 +19,15 @@ def _pixel_graph(char[:, :] img):
     adj = defaultdict(set)
     m = img.shape[0]
     n = img.shape[1]
-    for i in range(1, m-1, 2):
-        for j in range(1, n-1, 2):
+    for i in range(m):
+        for j in range(n):
             for imod in (-1, 0, 1):
                 for jmod in (-1, 0, 1):
                     if imod == jmod == 0:
+                        continue
+                    if i + imod < 0 or i + imod >= m:
+                        continue
+                    if j + jmod < 0 or j + jmod >= n:
                         continue
                     if img[i, j] and img[i + imod, j + jmod]:
                         adj[i, j].add((i + imod, j + jmod))
