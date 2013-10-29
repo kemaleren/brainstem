@@ -156,33 +156,23 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
     n_points = dists.shape[0]
 
     r_array = np.logspace(0, 1, n_radial_bins, base=10) / 10.0
-    r_array = np.hstack(([0], r_array))
-    theta_array = np.linspace(-np.pi, np.pi, n_polar_bins + 1)
+    r_array = np.hstack(([0], r_array))[1:]
+    theta_array = np.linspace(-np.pi, np.pi, n_polar_bins + 1)[1:]
     result = np.zeros((n_points, n_radial_bins, n_polar_bins),
                       dtype=np.int)
 
     # normalize distances
     dists = dists / dists.max()
 
-    # TODO: do in Cython
-    def get_idx(i, bins):
-        assert bins.ndim == 1
-        for idx in range(0, bins.size - 1):
-            if bins[idx] <= i < bins[idx + 1]:
-                return idx
-        if i == bins[idx + 1]:
-            return idx
-        raise Exception('{} does not fit in any bin in {}.'
-                        ' this should never happen.'.format(i, bins))
-
     for i in range(n_points):
-        for j in range(n_points):
-            if i == j:
-                continue
-            r_idx = get_idx(dists[i, j], r_array)
-            theta_idx = get_idx(angles[i, j], theta_array)
-            if r_idx != -1 and theta_idx != -1:
-                result[i, r_idx, theta_idx] += 1
+        for j in range(i + 1, n_points):
+            r_idx = np.searchsorted(r_array, dists[i, j])
+            theta_idx = np.searchsorted(theta_array, angles[i, j])
+            result[i, r_idx, theta_idx] += 1
+
+            theta_idx = np.searchsorted(theta_array, angles[j, i])
+            result[j, r_idx, theta_idx] += 1
+
     # ensure all points were counted
     assert (result.reshape(n_points, -1).sum(axis=1) == (n_points - 1)).all()
     return result
