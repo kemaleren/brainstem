@@ -39,6 +39,8 @@ def _sample_single_contour(img, n_points):
     # order. a better approach would be to find a locally stable
     # sorting. However, this seems to work well enough for now.
     graph = pixel_graph(img)
+    if len(graph) == 0:
+        return []
     visited = set()
     unvisited = set(graph.keys())
     stacked = set()
@@ -91,14 +93,15 @@ def sample_points(img, n_points=100):
     # reorder along curves; account for holes and disconnected lines
     # with connected components.
     labels, n_labels = ndimage.label(boundaries, structure=np.ones((3, 3)))
-    n_pixels = labels.sum()
-    curve_pixels = list((labels == lab + 1).sum() for lab in range(n_labels))
-    curve_n_points = list(int(np.ceil((p / n_pixels) * n_points))
-                          for p in curve_pixels)
+    n_labeled_pixels = labels.sum()
+    all_labels = range(1, n_labels + 1)
+    curve_n_pixels = list((labels == lab).sum() for lab in all_labels)
+    curve_n_points = list(int(np.ceil((n / n_labeled_pixels) * n_points))
+                          for n in curve_n_pixels)
 
     # sample a linear subset of each connected curve
-    samples = list(_sample_single_contour(labels == lab + 1, n)
-                   for lab, n in enumerate(curve_n_points))
+    samples = list(_sample_single_contour(labels == lab, n_points)
+                   for lab, n_points in zip(all_labels, curve_n_points))
 
     # append them together. They should be in order, because
     # ndimage.label() labels in order.
@@ -183,7 +186,7 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
     return result
 
 
-def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
+def shape_distance(a_descriptors, b_descriptors, penalty=0.3, backtrace=False):
     """Computes the distance between two shapes.
 
     The distance is defined as the minimal cost of aligning an ordered
@@ -191,6 +194,8 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
     more information, see Ling and Jacobs, 2007.
 
     Uses dynamic programming to find best alignment of sampled points.
+
+    If ``backtrace`` is True, also returns alignment.
 
     """
     # FIXME: Assumes the sequences' starting and ending points are aligned.
@@ -237,20 +242,44 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3):
 
     # tracing optimal alignment is not necessary. we are just
     # interested in the final cost.
-    return table[-1, -1]
+    if not backtrace:
+        return table[-1, -1]
+
+    i = n_rows - 1
+    j = n_cols - 1
+
+    alignment = []
+    while i > 0 or j > 0:
+        if i == 0 or j == 0:
+            break
+        
+        val = table[i - 1, j - 1]
+        up = table[i - 1, j]
+        left = table[i, j - 1]
+
+        if val <= left and val <= up:
+            alignment.append((i, j))
+            i = i - 1
+            j = j - 1
+        elif left < up:
+            j -= 1
+        else:
+            i -= 1
+    return table[-1, -1], alignment[::-1]
 
 
 def full_shape_distance(img1, img2):
     """A convenience function to compute the distance between two binary images."""
-    points1 = sample_points(img1)
+    points1 = sample_points(img1, 200)
     dists1, angles1 = euclidean_dists_angles(points1)
     descriptors1 = shape_context(dists1, angles1)
 
-    points2 = sample_points(img2)
+    points2 = sample_points(img2, 200)
     dists2, angles2 = euclidean_dists_angles(points2)
     descriptors2 = shape_context(dists2, angles2)
 
-    return shape_distance(descriptors1, descriptors2)
+    d, alignment = shape_distance(descriptors1, descriptors2, backtrace=True)
+    return d, points1, points2, alignment
 
 
 def dists_to_affinities(dists, neighbors=10, alpha=0.27):
