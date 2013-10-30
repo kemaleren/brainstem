@@ -7,7 +7,7 @@ Before using it, it is necessary to build the Cython modules in place:
 
     python setup.py build_ext --inplace
 
-Right now there are two modules. The first reads images and thresholds them. It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
+Right now there are two modules. The first reads images, thresholds them, . It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
 
 ```python
 import brainstem
@@ -15,14 +15,21 @@ import brainstem
 # get all available data files
 all_data_files = brainstem.get_filenames()
 
-# read the first from disk, cutting out the background
-img = brainstem.get_cutout(all_data_files[0])
+# read the first three from disk, cutting out the background
+imgs = list(brainstem.get_cutout(i) for i in all_data_files[:3])
 
-# sample a random subset of it (for speed)
-sub_img = brainstem.random_image_sample(img)
+# sample a random subset of each (for speed)
+samples = list(brainstem.random_image_sample(i) for i in imgs)
 
 # segment the cells
-labeled_img = brainstem.segment_cells(sub_img, rgb=True)
+segmented = list(brainstem.segment_cells(i) for i in samples)
+
+# calculate features and cluster objects
+labels = b.cluster_imgs(segmented)
+
+# generate color images of cluster membership
+clusters = b.label_clusters(segmented, labels, rgb=True)
+
 ````
 
 You will have to modify ``brainstem.DATADIR`` to point to a directory containing jp2 files. If you do not want the caching functionality, set ``brainstem.USE_CACHE = False``.
