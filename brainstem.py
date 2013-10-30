@@ -2,6 +2,7 @@ from __future__ import division
 
 import os
 from cPickle import dump, load
+import itertools
 
 import glymur
 
@@ -12,12 +13,14 @@ from scipy import ndimage
 from scipy import misc
 
 import sklearn.decomposition as decomp
+from sklearn.cluster import KMeans
 
 from skimage.filter import threshold_otsu, threshold_adaptive
 from skimage.morphology import binary_dilation, binary_erosion
-from skimage.color import label2rgb
 from skimage.morphology import watershed
+from skimage.color import label2rgb
 from skimage.feature import peak_local_max
+from skimage.measure import regionprops
 
 # a simple cache for grayscale images at different resolutions.
 USE_CACHE = True
@@ -106,7 +109,9 @@ def random_image_sample(img, scale=5):
 
 
 def segment_cells(img, rgb=False):
-    """label the cells in an image and return the labeled image.
+    """label the cells in an image.
+
+    Returns the labeled image and the number of labels.
 
     If the ``rgb`` parameter is True, returns
     ``skimage.color.label2rgb()`` on the result, which is convenient
@@ -125,9 +130,70 @@ def segment_cells(img, rgb=False):
     t_img = threshold_adaptive(img, 25, offset=.01)
     b_img = binary_erosion(-t_img, np.ones((3, 3)))
     d_img = binary_dilation(b_img, np.ones((3, 3)))
-    labels, _ = ndimage.label(d_img)
+    labels, n_labels = ndimage.label(d_img)
 
     if rgb:
         return label2rgb(labels, img, bg_label=0)
     return labels
 
+
+def object_features(img, feature_names):
+    """returns a feature array for the given features"""
+    props = regionprops(img)
+    f = lambda x: np.array(x).ravel()
+    return np.vstack(np.hstack(np.array(getattr(p, n)).ravel()
+                               for n in feature_names)
+                    for p in props)
+
+
+def feature_column_names(feature_names):
+    img = np.zeros((5, 5), dtype=np.bool)
+    img[1:4, 1:4] = 1
+    props = regionprops(img)
+    p = props[0]
+    f = lambda x: np.array(x).ravel()
+    names = ([n] * len(f(getattr(p, n))) for n in feature_names)
+    names = list(itertools.chain(*names))
+    return names
+
+
+def cluster_imgs(imgs, model=None):
+    if model is None:
+        model = KMeans()
+    feature_names = (
+        'area',
+        'convex_area',
+        'eccentricity',
+        'equivalent_diameter',
+        'extent',
+        'filled_area',
+        'inertia_tensor',
+        'inertia_tensor_eigvals',
+        'major_axis_length',
+        'minor_axis_length',
+        'moments',
+        'moments_central',
+        'moments_hu',
+        'perimeter',
+        'solidity',
+        )
+    features = list(object_features(img, feature_names)
+                    for img in imgs)
+    n_objects = list(len(f) for f in features)
+    a = np.insert(np.cumsum(n_objects), 0, 0)
+    slices = list(slice(a[i], a[i + 1]) for i in range(len(a) - 1))
+    X = np.vstack(features)
+    model.fit(X)
+    labels = list(model.labels_[slc] for slc in slices)
+    return labels
+
+
+def label_clusters(imgs, labels, rgb=False):
+    result = []
+    for img, label in zip(imgs, labels):
+        label = np.insert(label, 0, np.int32(-1)) + 1
+        if rgb:
+            result.append(label2rgb(label[img], bg_label=0))
+        else:
+            result.append(label[img])
+    return result
