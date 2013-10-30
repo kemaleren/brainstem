@@ -7,7 +7,7 @@ Before using it, it is necessary to build the Cython modules in place:
 
     python setup.py build_ext --inplace
 
-Right now there are two modules. The first reads images, thresholds them, . It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
+Right now there are two modules. The first reads images, thresholds them, and clusters objects found by thresholding. It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
 
 ```python
 import brainstem
