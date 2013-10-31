@@ -90,7 +90,9 @@ def get_cutout(filename):
     x_slc = slice(slc[0].start * 2 ** 3, slc[0].stop * 2 ** 3)
     y_slc = slice(slc[1].start * 2 ** 3, slc[1].stop * 2 ** 3)
     img = read_img(filename, rlevel=1)
-    return img[x_slc, y_slc]
+    cutout = img[x_slc, y_slc]
+    del img
+    return cutout
 
 
 def random_image_sample(img, scale=5):
@@ -106,6 +108,16 @@ def random_image_sample(img, scale=5):
 
     return img[x_start : x_start + x_shape,
                y_start : y_start + y_shape]
+
+
+def sample_many(filenames, scale=5):
+    result = []
+    for f in filenames:
+        img = get_cutout(f)
+        sample = random_image_sample(img, scale).copy()
+        del img
+        result.append(sample)
+    return result
 
 
 def segment_cells(img, rgb=False):
@@ -157,38 +169,35 @@ def feature_column_names(feature_names):
     return names
 
 
-def cluster_imgs(imgs, model=None):
-    if model is None:
-        model = KMeans()
-    feature_names = (
-        'area',
-        'convex_area',
-        'eccentricity',
-        'equivalent_diameter',
-        'extent',
-        'filled_area',
-        'inertia_tensor',
-        'inertia_tensor_eigvals',
-        'major_axis_length',
-        'minor_axis_length',
-        'moments',
-        'moments_central',
-        'moments_hu',
-        'perimeter',
-        'solidity',
-        )
+def all_object_features(imgs, feature_names=None):
+    if feature_names is None:
+        feature_names = (
+            'area',
+            'convex_area',
+            'eccentricity',
+            'equivalent_diameter',
+            'extent',
+            'filled_area',
+            'inertia_tensor',
+            'inertia_tensor_eigvals',
+            'major_axis_length',
+            'minor_axis_length',
+            'moments',
+            'moments_central',
+            'moments_hu',
+            'perimeter',
+            'solidity',
+            )
     features = list(object_features(img, feature_names)
                     for img in imgs)
-    n_objects = list(len(f) for f in features)
-    a = np.insert(np.cumsum(n_objects), 0, 0)
-    slices = list(slice(a[i], a[i + 1]) for i in range(len(a) - 1))
-    X = np.vstack(features)
-    model.fit(X)
-    labels = list(model.labels_[slc] for slc in slices)
-    return labels
+    return np.vstack(features)
 
 
 def label_clusters(imgs, labels, rgb=False):
+    n_objects = list(len(set(i.flatten())) - 1for i in imgs)
+    a = np.insert(np.cumsum(n_objects), 0, 0)
+    slices = list(slice(a[i], a[i + 1]) for i in range(len(a) - 1))
+    labels = list(labels[slc] for slc in slices)
     result = []
     for img, label in zip(imgs, labels):
         label = np.insert(label, 0, np.int32(-1)) + 1
