@@ -22,6 +22,25 @@ from skimage.color import label2rgb
 from skimage.feature import peak_local_max
 from skimage.measure import regionprops
 
+# list of shape descriptors for clustering
+FEATURE_NAMES = (
+    'area',
+    'convex_area',
+    'eccentricity',
+    'equivalent_diameter',
+    'extent',
+    'filled_area',
+    'inertia_tensor',
+    'inertia_tensor_eigvals',
+    'major_axis_length',
+    'minor_axis_length',
+    'moments',
+    'moments_central',
+    'moments_hu',
+    'perimeter',
+    'solidity',
+    )
+
 # a simple cache for grayscale images at different resolutions.
 USE_CACHE = True
 DATA_DIR = os.path.expanduser("~/devel/data/images/PMD1305_N")
@@ -149,8 +168,10 @@ def segment_cells(img, rgb=False):
     return labels
 
 
-def object_features(img, feature_names):
+def object_features(img, feature_names=None):
     """returns a feature array for the given features"""
+    if feature_names is None:
+        feature_names = FEATURE_NAMES
     props = regionprops(img)
     f = lambda x: np.array(x).ravel()
     return np.vstack(np.hstack(np.array(getattr(p, n)).ravel()
@@ -158,7 +179,9 @@ def object_features(img, feature_names):
                     for p in props)
 
 
-def feature_column_names(feature_names):
+def feature_column_names(feature_names=None):
+    if feature_names is None:
+        feature_names = FEATURE_NAMES
     img = np.zeros((5, 5), dtype=np.bool)
     img[1:4, 1:4] = 1
     props = regionprops(img)
@@ -171,23 +194,7 @@ def feature_column_names(feature_names):
 
 def all_object_features(imgs, feature_names=None):
     if feature_names is None:
-        feature_names = (
-            'area',
-            'convex_area',
-            'eccentricity',
-            'equivalent_diameter',
-            'extent',
-            'filled_area',
-            'inertia_tensor',
-            'inertia_tensor_eigvals',
-            'major_axis_length',
-            'minor_axis_length',
-            'moments',
-            'moments_central',
-            'moments_hu',
-            'perimeter',
-            'solidity',
-            )
+        feature_names=FEATURE_NAMES
     features = list(object_features(img, feature_names)
                     for img in imgs)
     return np.vstack(features)
