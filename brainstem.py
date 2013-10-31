@@ -32,13 +32,8 @@ FEATURE_NAMES = (
     'equivalent_diameter',
     'extent',
     'filled_area',
-    'inertia_tensor',
-    'inertia_tensor_eigvals',
     'major_axis_length',
     'minor_axis_length',
-    'moments',
-    'moments_central',
-    'moments_hu',
     'perimeter',
     'solidity',
     )
