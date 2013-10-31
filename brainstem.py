@@ -21,6 +21,8 @@ from skimage.morphology import watershed
 from skimage.color import label2rgb
 from skimage.feature import peak_local_max
 from skimage.measure import regionprops
+from skimage.segmentation import clear_border
+
 
 # list of shape descriptors for clustering
 FEATURE_NAMES = (
@@ -161,6 +163,7 @@ def segment_cells(img, rgb=False):
     t_img = threshold_adaptive(img, 25, offset=.01)
     b_img = binary_erosion(-t_img, np.ones((3, 3)))
     d_img = binary_dilation(b_img, np.ones((3, 3)))
+    clear_border(d_img)
     labels, n_labels = ndimage.label(d_img)
 
     if rgb:
@@ -180,6 +183,13 @@ def object_features(img, feature_names=None):
 
 
 def feature_column_names(feature_names=None):
+    """Returns the feature name of each column.
+
+    Some features have more than one value. This function makes it
+    easier to figure out the feature corresponding to a particular
+    column.
+
+    """
     if feature_names is None:
         feature_names = FEATURE_NAMES
     img = np.zeros((5, 5), dtype=np.bool)
@@ -193,6 +203,7 @@ def feature_column_names(feature_names=None):
 
 
 def all_object_features(imgs, feature_names=None):
+    """a convenience function for extracting features for multiple images."""
     if feature_names is None:
         feature_names=FEATURE_NAMES
     features = list(object_features(img, feature_names)
@@ -201,6 +212,7 @@ def all_object_features(imgs, feature_names=None):
 
 
 def label_clusters(imgs, labels, rgb=False):
+    """label each object with the corresponding cluster from ``labels``."""
     n_objects = list(len(set(i.flatten())) - 1for i in imgs)
     a = np.insert(np.cumsum(n_objects), 0, 0)
     slices = list(slice(a[i], a[i + 1]) for i in range(len(a) - 1))
