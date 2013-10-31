@@ -10,25 +10,32 @@ Before using it, it is necessary to build the Cython modules in place:
 Right now there are two modules. The first reads images, thresholds them, and clusters objects found by thresholding. It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
 
 ```python
-import brainstem
+import brainstem as b
+from sklearn.decomposition import RandomizedPCA
+from sklearn.cluster import MiniBatchKMeans
 
-# get all available data files
-all_data_files = brainstem.get_filenames()
+# get a list of all available image files
+filenames = b.get_filenames()
 
-# read the first three from disk, cutting out the background
-imgs = list(brainstem.get_cutout(i) for i in all_data_files[:3])
+# get a cropped version of the first few files
+samples = b.sample_many(filenames[:5])
 
-# sample a random subset of each (for speed)
-samples = list(brainstem.random_image_sample(i) for i in imgs)
+# segment the cells in each image
+segmented = list(b.segment_cells(i) for i in samples)
 
-# segment the cells
-segmented = list(brainstem.segment_cells(i) for i in samples)
+# cluster the resulting objects
+X = b.all_object_features(segmented)
+model = MiniBatchKMeans()
+model.fit(X)
 
-# calculate features and cluster objects
-labels = b.cluster_imgs(segmented)
+# visualize results, projecting onto first two principal components
+pca = RandomizedPCA(2)
+Xp = pca.fit_transform(X)
+pp.scatter(Xp[:, 0], Xp[:, 1], c=model.labels_, s=30)
 
-# generate color images of cluster membership
-clusters = b.label_clusters(segmented, labels, rgb=True)
+# visualize clusters in the first image
+clustered_imgs = b.label_clusters(segmented, model.labels_, rgb=True)
+pp.imshow(clustered_imgs[0])
 
 ````
 
