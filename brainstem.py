@@ -141,14 +141,10 @@ def sample_many(filenames, scale=5):
     return result
 
 
-def segment_cells(img, rgb=False):
+def segment_cells(img):
     """label the cells in an image.
 
     Returns the labeled image and the number of labels.
-
-    If the ``rgb`` parameter is True, returns
-    ``skimage.color.label2rgb()`` on the result, which is convenient
-    for visualization.
 
     """
     # # global threshold and watershed
@@ -165,9 +161,6 @@ def segment_cells(img, rgb=False):
     d_img = binary_dilation(b_img, np.ones((3, 3)))
     clear_border(d_img)
     labels, n_labels = ndimage.label(d_img)
-
-    if rgb:
-        return label2rgb(labels, img, bg_label=0)
     return labels
 
 
