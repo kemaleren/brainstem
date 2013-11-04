@@ -17,6 +17,8 @@ def pixel_graph(img):
     return _pixel_graph(img.astype(np.uint8))
 
 
+# TODO: move asserts to tests
+
 def _sample_single_contour(img, n_points):
     """Samples pixels, in order, along a contour.
 
@@ -53,12 +55,12 @@ def _sample_single_contour(img, n_points):
     stack.append(start)
     
     while unvisited:
-        assert len(visited) + len(unvisited) == len(graph)
+        # assert len(visited) + len(unvisited) == len(graph)
         try:
             node = stack.pop()
         except:
             node = unvisited.pop()
-        assert not node in visited
+        # assert not node in visited
         order.append(node)
         visited.add(node)
         unvisited.remove(node)
@@ -66,9 +68,9 @@ def _sample_single_contour(img, n_points):
         for n in neighbors - stacked - visited:
             stack.append(n)
             stacked.add(n)
-        assert len(visited) + len(unvisited) == len(graph)
-        assert len(visited & unvisited) == 0
-    assert len(order) == len(graph)
+        # assert len(visited) + len(unvisited) == len(graph)
+        # assert len(visited & unvisited) == 0
+    # assert len(order) == len(graph)
     stride = int(np.ceil(len(order) / n_points))
     return order[::stride]
 
@@ -159,7 +161,7 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
     assert dists.shape == angles.shape
 
     # ensure distances are symmetric
-    assert (dists.T == dists).all()
+    # assert (dists.T == dists).all()
 
     n_points = dists.shape[0]
 
@@ -182,7 +184,7 @@ def shape_context(dists, angles, n_radial_bins=5, n_polar_bins=12):
             result[j, r_idx, theta_idx] += 1
 
     # ensure all points were counted
-    assert (result.reshape(n_points, -1).sum(axis=1) == (n_points - 1)).all()
+    # assert (result.reshape(n_points, -1).sum(axis=1) == (n_points - 1)).all()
     return result
 
 
@@ -268,18 +270,18 @@ def shape_distance(a_descriptors, b_descriptors, penalty=0.3, backtrace=False):
     return table[-1, -1], alignment[::-1]
 
 
-def full_shape_distance(img1, img2):
+def full_shape_distance(img1, img2, n_points=100):
     """A convenience function to compute the distance between two binary images."""
-    points1 = sample_points(img1, 200)
+    points1 = sample_points(img1, n_points=n_points)
     dists1, angles1 = euclidean_dists_angles(points1)
     descriptors1 = shape_context(dists1, angles1)
 
-    points2 = sample_points(img2, 200)
+    points2 = sample_points(img2, n_points=n_points)
     dists2, angles2 = euclidean_dists_angles(points2)
     descriptors2 = shape_context(dists2, angles2)
 
-    d, alignment = shape_distance(descriptors1, descriptors2, backtrace=True)
-    return d, points1, points2, alignment
+    d = shape_distance(descriptors1, descriptors2)
+    return d
 
 
 def dists_to_affinities(dists, neighbors=10, alpha=0.27):
@@ -288,8 +290,9 @@ def dists_to_affinities(dists, neighbors=10, alpha=0.27):
     sorted_rows = np.sort(dists, axis=1)
     for i in range(dists.shape[0]):
         for j in range(i, dists.shape[1]):
-            sigma = np.mean(sorted_rows[i, 1:neighbors],
-                            sorted_rows[j, 1:neighbors])
+            nn_dists = np.hstack((sorted_rows[i, 1:neighbors],
+                                  sorted_rows[j, 1:neighbors]))
+            sigma = alpha * nn_dists.mean()
             sim = scipy.stats.norm.pdf(dists[i, j], loc=0, scale=alpha * sigma)
             affinities[i, j] = sim
             affinities[j, i] = sim
@@ -322,6 +325,4 @@ def graph_transduction(i, affinities, max_iters=5000):
 def compute_new_affinities(affinities):
     """Computes all new pairwise affinities by graph transduction."""
     result = list(graph_transduction(i, affinities) for i in range(affinities.shape[0]))
-    # TODO: is the result symmetric?
-    assert (affinities.T == affinities).all()
     return np.vstack(affinities)
