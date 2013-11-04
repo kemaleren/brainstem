@@ -156,7 +156,7 @@ def segment_cells(img):
     d_img = binary_dilation(b_img, np.ones((3, 3)))
     clear_border(d_img)
     labels, n_labels = ndimage.label(d_img)
-    return labels
+    return labels, n_labels
 
 
 def object_features(img, feature_names=None):
@@ -199,17 +199,20 @@ def all_object_features(imgs, feature_names=None):
     return np.vstack(features)
 
 
-def label_clusters(imgs, labels, rgb=False):
-    """label each object with the corresponding cluster from ``labels``."""
-    n_objects = list(len(set(i.flatten())) - 1for i in imgs)
+def split_labels(imgs, labels, n_objects=None):
+    """split a single label vector according to binary images"""
+    if n_objects is None:
+        n_objects = list(len(set(i.flatten())) - 1 for i in imgs)
     a = np.insert(np.cumsum(n_objects), 0, 0)
     slices = list(slice(a[i], a[i + 1]) for i in range(len(a) - 1))
     labels = list(labels[slc] for slc in slices)
-    result = []
-    for img, label in zip(imgs, labels):
-        label = np.insert(label, 0, np.int32(-1)) + 1
-        if rgb:
-            result.append(label2rgb(label[img], bg_label=0))
-        else:
-            result.append(label[img])
-    return result
+    return labels
+
+
+def assign_clusters(img, labels, rgb=False):
+    """label each object with the corresponding cluster from ``labels``."""
+    labels = np.insert(labels, 0, np.int32(-1)) + 1
+    if rgb:
+        return label2rgb(labels[img], bg_label=0)
+    return labels[img]
+
