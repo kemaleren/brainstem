@@ -13,6 +13,7 @@ Right now there are two modules. The first reads images, thresholds them, and cl
 import brainstem as b
 from sklearn.decomposition import RandomizedPCA
 from sklearn.cluster import MiniBatchKMeans
+from matplotlib import pyplot as pp
 
 # get a list of all available image files
 filenames = b.get_filenames()
@@ -21,7 +22,7 @@ filenames = b.get_filenames()
 samples = b.sample_many(filenames[:5])
 
 # segment the cells in each image
-segmented = list(b.segment_cells(i) for i in samples)
+segmented, n_objects = zip(*list(b.segment_cells(i) for i in samples))
 
 # cluster the resulting objects
 X = b.all_object_features(segmented)
@@ -31,11 +32,14 @@ model.fit(X)
 # visualize results, projecting onto first two principal components
 pca = RandomizedPCA(2)
 Xp = pca.fit_transform(X)
+pp.figure()
 pp.scatter(Xp[:, 0], Xp[:, 1], c=model.labels_, s=30)
 
 # visualize clusters in the first image
-clustered_imgs = b.label_clusters(segmented, model.labels_, rgb=True)
-pp.imshow(clustered_imgs[0])
+label_vecs = b.split_labels(segmented, model.labels_, n_objects=n_objects)
+clustered_img = b.assign_clusters(segmented[0], label_vecs[0], rgb=True)
+pp.figure()
+pp.imshow(clustered_img)
 
 ````
 
@@ -59,4 +63,5 @@ legless[200:, 200:] = 0
 
 # compute the distance between them
 sc.full_shape_distance(binary_img, legless)
+
 ```
