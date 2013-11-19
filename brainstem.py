@@ -209,10 +209,10 @@ def split_labels(imgs, labels, n_objects=None):
     return labels
 
 
-def assign_clusters(img, labels, rgb=False):
+def assign_clusters(img, labels, rgb=False, colors=None):
     """label each object with the corresponding cluster from ``labels``."""
     labels = np.insert(labels, 0, np.int32(-1)) + 1
     if rgb:
-        return label2rgb(labels[img], bg_label=0)
+        return label2rgb(labels[img], bg_label=0, colors=colors)
     return labels[img]
 
