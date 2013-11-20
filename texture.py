@@ -15,13 +15,13 @@ from skimage.filter import gaussian_filter
 
 def make_filter_bank(frequencies, thetas, sigmas):
     """prepare filter bank of kernels"""
-    # TODO: taken from scikit-image example. modify to match paper.
     # TODO: set MTF of each filter at (u, v) to 0
+    # TODO: set sigma_x and sigma_y correctly
     kernels = []
     all_freqs = []
     for frequency in frequencies:
         for theta in thetas:
-            theta = theta / 4. * np.pi
+            theta = theta * np.pi / 4.0
             for sigma in sigmas:
                 kernel = np.real(gabor_kernel(frequency, theta=theta,
                                               sigma_x=sigma, sigma_y=sigma))
@@ -50,6 +50,7 @@ def filter_image(image, kernels, frequencies, r2=0.95):
 
     r2s = np.cumsum(energies) / energies.sum()
     k = np.searchsorted(r2s, r2)
+    n_start = filtered.shape[2]
     return filtered[:, :, :k], frequencies[idx][:k]
 
 
@@ -89,12 +90,18 @@ def add_coordinates(features, spatial_importance=1.0):
     return features
 
 
-def segment_textures(img, model):
-    # TODO: these filter parameters are insufficient
+def _get_freqs(img):
     n_cols = img.shape[1]
-    n_freqs = int(np.ceil(np.log2(n_cols)))  # TODO: add 1 to this?
-    frequencies = list((2 ** i) * np.sqrt(2) for i in range(n_freqs))
-    thetas = range(4)
+    next_pow2 = 2 ** int(np.ceil(np.log2(n_cols)))
+    min_freq = next_pow2 / 4
+    n_freqs = int(np.log2(min_freq)) + 2
+    return list((2 ** i) * np.sqrt(2) for i in range(n_freqs))
+
+
+def segment_textures(img, model):
+    # TODO: these filter parameters are not correct
+    frequencies = _get_freqs(img)
+    thetas = np.arange(4)
     sigmas = (1, 3, 5)
     kernels, all_freqs = make_filter_bank(frequencies, thetas, sigmas)
     filtered, all_freqs = filter_image(img, kernels, all_freqs)
