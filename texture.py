@@ -13,7 +13,7 @@ from skimage.filter import gabor_kernel
 from skimage.filter import gaussian_filter
 
 
-def make_filter_bank(frequencies, thetas, sigmas):
+def make_filter_bank(frequencies, thetas, bandwidths):
     """prepare filter bank of kernels"""
     # TODO: set MTF of each filter at (u, v) to 0
     # TODO: set sigma_x and sigma_y correctly
@@ -21,16 +21,16 @@ def make_filter_bank(frequencies, thetas, sigmas):
     all_freqs = []
     for frequency in frequencies:
         for theta in thetas:
-            theta = theta * np.pi / 4.0
-            for sigma in sigmas:
+            for bandwidth in bandwidths:
+                theta = theta * np.pi / 4.0
                 kernel = np.real(gabor_kernel(frequency, theta=theta,
-                                              sigma_x=sigma, sigma_y=sigma))
+                                              bandwidth=bandwidth))
                 kernels.append(kernel)
                 all_freqs.append(frequency)
     return kernels, np.array(all_freqs)
 
 
-def filter_image(image, kernels, frequencies, r2=0.95):
+def filter_image(image, kernels, frequencies, r2=0.95, select=True):
     """Computes all convolutions and discards some filtered images.
 
     Returns filtered images with the largest energies so that the
@@ -40,6 +40,8 @@ def filter_image(image, kernels, frequencies, r2=0.95):
     # TODO: faster in fourier domain?
     filtered = np.dstack(nd.convolve(image, kernel, mode='wrap')
                          for kernel in kernels)
+    if not select:
+        return filtered, frequencies
     energies = filtered.sum(axis=0).sum(axis=0)
 
     # sort from largest to smallest energy
@@ -102,8 +104,8 @@ def segment_textures(img, model):
     # TODO: these filter parameters are not correct
     frequencies = _get_freqs(img)
     thetas = np.arange(4)
-    sigmas = (1, 3, 5)
-    kernels, all_freqs = make_filter_bank(frequencies, thetas, sigmas)
+    bandwidths = (0.1, 0.5, 1, 1.5, 2)
+    kernels, all_freqs = make_filter_bank(frequencies, thetas, bandwidths)
     filtered, all_freqs = filter_image(img, kernels, all_freqs)
     features = compute_features(filtered, all_freqs)
     features = add_coordinates(features)
