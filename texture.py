@@ -12,21 +12,26 @@ from scipy import ndimage as nd
 from skimage.filter import gabor_kernel
 from skimage.filter import gaussian_filter
 
+def _compute_sigmas(frequency, freq_band=1, angular_band=np.deg2rad(45)):
+    sigma_x = np.sqrt(np.log(2)) * (2 ** freq_band + 1) / (np.sqrt(2) * np.pi * frequency * (2 ** freq_band - 1))
+    sigma_y = np.sqrt(np.log(2)) / (np.sqrt(2) * np.pi * frequency * np.tan(angular_band / 2))
+    return sigma_x, sigma_y
 
-def make_filter_bank(frequencies, thetas, bandwidths):
+
+
+def make_filter_bank(frequencies, thetas):
     """prepare filter bank of kernels"""
     # TODO: set MTF of each filter at (u, v) to 0
     # TODO: set sigma_x and sigma_y correctly
     kernels = []
     all_freqs = []
     for frequency in frequencies:
+        sigma_x, sigma_y = _compute_sigmas(frequency)
         for theta in thetas:
-            for bandwidth in bandwidths:
-                theta = theta * np.pi / 4.0
-                kernel = np.real(gabor_kernel(frequency, theta=theta,
-                                              bandwidth=bandwidth))
-                kernels.append(kernel)
-                all_freqs.append(frequency)
+            kernel = np.real(gabor_kernel(frequency, theta=theta,
+                                          sigma_x=sigma_x, sigma_y=sigma_y))
+            kernels.append(kernel)
+            all_freqs.append(frequency)
     return kernels, np.array(all_freqs)
 
 
@@ -97,15 +102,14 @@ def _get_freqs(img):
     next_pow2 = 2 ** int(np.ceil(np.log2(n_cols)))
     min_freq = next_pow2 / 4
     n_freqs = int(np.log2(min_freq)) + 2
-    return list((2 ** i) * np.sqrt(2) for i in range(n_freqs))
+    return list(np.sqrt(2) / float(2 ** i) for i in range(n_freqs))
 
 
 def segment_textures(img, model):
     # TODO: these filter parameters are not correct
     frequencies = _get_freqs(img)
-    thetas = np.arange(4)
-    bandwidths = (0.1, 0.5, 1, 1.5, 2)
-    kernels, all_freqs = make_filter_bank(frequencies, thetas, bandwidths)
+    thetas = np.deg2rad([0, 45, 90, 135])
+    kernels, all_freqs = make_filter_bank(frequencies, thetas)
     filtered, all_freqs = filter_image(img, kernels, all_freqs)
     features = compute_features(filtered, all_freqs)
     features = add_coordinates(features)
