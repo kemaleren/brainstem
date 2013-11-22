@@ -9,70 +9,30 @@ from __future__ import division
 import numpy as np
 from scipy import ndimage as nd
 
-# from skimage.filter import gabor_kernel
+from skimage.filter import gabor_kernel
 from skimage.filter import gaussian_filter
 
-
-def gabor_kernel(scale, orientation, Ul, Uh, n_scales, n_orientations, size, flag=True):
-    # print "scale: {} orientation: {}".format(scale, orientation)
-    # print "-------------------------"
-    base = Uh / Ul
-    a = np.power(base, 1.0 / (n_scales - 1))
-    u0 = Uh / np.power(a, n_scales - scale)
-    Uvar = (a - 1.0) * u0 / ((a + 1.0) * np.sqrt(2.0 * np.log(2.0)))
-    z = -2.0 * np.log(2.0) * (Uvar * Uvar) / u0
-    Vvar = np.tan(np.pi / ( 2 * n_orientations)) * (u0 + z) / np.sqrt(2.0 * np.log(2.0) - z * z / (Uvar * Uvar))
-
-    Xvar = 1.0 / (2.0 * np.pi * Uvar)
-    Yvar = 1.0 / (2.0 * np.pi * Vvar)
-
-    t1 = np.cos(np.pi / n_orientations * (orientation - 1.0))
-    t2 = np.sin(np.pi / n_orientations * (orientation - 1.0))
-
-    # print "base: {}".format(base)
-    # print "a: {}".format(a)
-    # print "u0: {}".format(u0)
-    # print "Uvar: {}".format(Uvar)
-    # print "z: {}".format(z)
-    # print "Vvar: {}".format(Vvar)
-    # print "Xvar: {}".format(Xvar)
-    # print "Yvar: {}".format(Yvar)
-    # print "t1: {}".format(t1)
-    # print "t2: {}".format(t2)
-    # print ""
-
-    side = int((size - 1) / 2)
-
-    result = np.zeros((size, size), dtype=np.complex)
-    
-    for x in range(size):
-        for y in range(size):
-            X = (x - side) * t1 + (y - side) * t2
-            Y = -(x - side) * t2 + (y - side) * t1
-            G = 1.0 / (2.0 * np.pi * Xvar * Yvar) * np.power(a, n_scales - scale) * np.exp(-0.5 * ((X * X) / (Xvar * Xvar) + (Y * Y) / (Yvar * Yvar)))
-            result[x, y] = G * np.cos(2.0 * np.pi * u0 * X) + 1j * G * np.sin(2.0 * np.pi * u0 * X)
-
-    if flag:
-        m = 0
-        for x in range(2 * side + 1):
-            for y in range(2 * side + 1):
-                m += np.real(result[x, y])
-
-        m /= np.power(2.0 * side + 1, 2.0)
-        
-        for x in range(2 * side + 1):
-            for y in range(2 * side + 1):
-                result[x, y] -= m
-    return result, u0
+def _compute_sigmas(frequency, freq_band=1, angular_band=np.deg2rad(45)):
+    sigma_x = np.sqrt(np.log(2)) * (2 ** freq_band + 1) / (np.sqrt(2) * np.pi * frequency * (2 ** freq_band - 1))
+    sigma_y = np.sqrt(np.log(2)) / (np.sqrt(2) * np.pi * frequency * np.tan(angular_band / 2))
+    return sigma_x, sigma_y
 
 
-def make_filter_bank(Ul, Uh, n_scales, n_orientations, size, flag):
+
+def make_filter_bank(frequencies, thetas):
     """prepare filter bank of kernels"""
-    result = list(gabor_kernel(s, n, Ul, Uh, n_scales, n_orientations, size, flag)
-                  for s in range(1, n_scales + 1)
-                  for n in range(1, n_orientations + 1))
-    kernels, freqs = zip(*result)
-    return kernels, np.array(freqs)
+    # TODO: set MTF of each filter at (u, v) to 0
+    # TODO: set sigma_x and sigma_y correctly
+    kernels = []
+    all_freqs = []
+    for frequency in frequencies:
+        sigma_x, sigma_y = _compute_sigmas(frequency)
+        for theta in thetas:
+            kernel = np.real(gabor_kernel(frequency, theta=theta,
+                                          sigma_x=sigma_x, sigma_y=sigma_y))
+            kernels.append(kernel)
+            all_freqs.append(frequency)
+    return kernels, np.array(all_freqs)
 
 
 def filter_image(image, kernels, frequencies, r2=0.95, select=True):
@@ -113,7 +73,7 @@ def compute_features(filtered, frequencies,
     # TODO: is this really what the paper means in formula 6?
     nonlinear = np.tanh(alpha * filtered)
     ncols = filtered.shape[1]
-    sigmas = proportion * ncols * np.array(frequencies)
+    sigmas = proportion * ncols / np.array(frequencies)
     features = np.dstack(gaussian_filter(nonlinear[:, :, i], sigmas[i])
                          for i in range(len(sigmas)))
     return features
@@ -147,10 +107,9 @@ def _get_freqs(img):
 
 def segment_textures(img, model):
     # TODO: these filter parameters are not correct
-    # frequencies = _get_freqs(img)
-    # thetas = np.deg2rad([0, 45, 90, 135])
-    kernels, all_freqs = make_filter_bank(0.1, 0.4, 3, 4, 60, False)
-    kernels = list(np.real(k) for k in kernels)
+    frequencies = _get_freqs(img)
+    thetas = np.deg2rad([0, 45, 90, 135])
+    kernels, all_freqs = make_filter_bank(frequencies, thetas)
     filtered, all_freqs = filter_image(img, kernels, all_freqs)
     features = compute_features(filtered, all_freqs)
     features = add_coordinates(features)
