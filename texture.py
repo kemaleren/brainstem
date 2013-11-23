@@ -12,24 +12,23 @@ from scipy import ndimage as nd
 from skimage.filter import gabor_kernel
 from skimage.filter import gaussian_filter
 
+
 def _compute_sigmas(frequency, freq_band=1, angular_band=np.deg2rad(45)):
     sigma_x = np.sqrt(np.log(2)) * (2 ** freq_band + 1) / (np.sqrt(2) * np.pi * frequency * (2 ** freq_band - 1))
     sigma_y = np.sqrt(np.log(2)) / (np.sqrt(2) * np.pi * frequency * np.tan(angular_band / 2))
     return sigma_x, sigma_y
 
 
-
 def make_filter_bank(frequencies, thetas):
     """prepare filter bank of kernels"""
     # TODO: set MTF of each filter at (u, v) to 0
-    # TODO: set sigma_x and sigma_y correctly
     kernels = []
     all_freqs = []
     for frequency in frequencies:
         sigma_x, sigma_y = _compute_sigmas(frequency)
         for theta in thetas:
-            kernel = np.real(gabor_kernel(frequency, theta=theta,
-                                          sigma_x=sigma_x, sigma_y=sigma_y))
+            kernel = gabor_kernel(frequency, theta=theta,
+                                  bandwidth=1)
             kernels.append(kernel)
             all_freqs.append(frequency)
     return kernels, np.array(all_freqs)
@@ -42,7 +41,6 @@ def filter_image(image, kernels, frequencies, r2=0.95, select=True):
     coefficient of determiniation is >= ``r2``.
 
     """
-    # TODO: faster in fourier domain?
     filtered = np.dstack(nd.convolve(image, kernel, mode='wrap')
                          for kernel in kernels)
     if not select:
@@ -73,7 +71,11 @@ def compute_features(filtered, frequencies,
     # TODO: is this really what the paper means in formula 6?
     nonlinear = np.tanh(alpha * filtered)
     ncols = filtered.shape[1]
-    sigmas = proportion * ncols / np.array(frequencies)
+
+    # paper says proportion * n_cols / frequency, but remember that
+    # their frequency is in cycles per image width. our frequency is
+    # in cycles per pixel, so we just need to take the inverse.
+    sigmas = proportion * (1.0 / np.array(frequencies))
     features = np.dstack(gaussian_filter(nonlinear[:, :, i], sigmas[i])
                          for i in range(len(sigmas)))
     return features
@@ -97,20 +99,26 @@ def add_coordinates(features, spatial_importance=1.0):
     return features
 
 
-def _get_freqs(img):
+def get_freqs(img):
     n_cols = img.shape[1]
     next_pow2 = 2 ** int(np.ceil(np.log2(n_cols)))
     min_freq = next_pow2 / 4
     n_freqs = int(np.log2(min_freq)) + 2
-    return list(np.sqrt(2) / float(2 ** i) for i in range(n_freqs))
+
+    # note: paper gives frequency in cycles per image width.
+    # we need cycles per pixel, so divide by image width
+    frequencies =  list((np.sqrt(2) * float(2 ** i)) / n_cols for i in range(n_freqs))
+
+    # only keep 5 highest frequencies
+    return frequencies[-5:]
 
 
 def segment_textures(img, model):
-    # TODO: these filter parameters are not correct
-    frequencies = _get_freqs(img)
+    frequencies = get_freqs(img)
     thetas = np.deg2rad([0, 45, 90, 135])
     kernels, all_freqs = make_filter_bank(frequencies, thetas)
-    filtered, all_freqs = filter_image(img, kernels, all_freqs)
+    kernels = list(np.real(k) for k in kernels)
+    filtered, all_freqs = filter_image(img, kernels, all_freqs, select=True)
     features = compute_features(filtered, all_freqs)
     features = add_coordinates(features)
     n_feats = features.shape[-1]
