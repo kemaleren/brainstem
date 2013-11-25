@@ -102,7 +102,7 @@ def get_cutout(filename):
     small_img = read_img(filename, rlevel=4)
     small_img = make_grey(small_img)
     blurred = ndimage.gaussian_filter(small_img, 10)
-    slc = ndimage.measurements.find_objects(blurred < threshold_otsu(blurred))[0]
+    slc = ndimage.measurements.find_objects(blurred > threshold_otsu(blurred))[0]
     x_slc = slice(slc[0].start * 2 ** 3, slc[0].stop * 2 ** 3)
     y_slc = slice(slc[1].start * 2 ** 3, slc[1].stop * 2 ** 3)
     img = read_img(filename, rlevel=1)

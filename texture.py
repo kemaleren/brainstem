@@ -107,7 +107,8 @@ def get_freqs(img):
 
     # note: paper gives frequency in cycles per image width.
     # we need cycles per pixel, so divide by image width
-    frequencies =  list((np.sqrt(2) * float(2 ** i)) / n_cols for i in range(n_freqs))
+    frequencies =  list((np.sqrt(2) * float(2 ** i)) / n_cols
+                        for i in range(n_freqs))
 
     # only keep 5 highest frequencies
     return frequencies[-5:]
