@@ -7,10 +7,13 @@ Jain and Farrokhnia, "Unsupervised texture segmentation using Gabor filters" (19
 from __future__ import division
 
 import numpy as np
+from scipy.signal import fftconvolve
 from scipy import ndimage as nd
 
 from skimage.filter import gabor_kernel
 from skimage.filter import gaussian_filter
+
+from sklearn.decomposition import PCA
 
 
 def _compute_sigmas(frequency, freq_band=1, angular_band=np.deg2rad(45)):
@@ -41,7 +44,7 @@ def filter_image(image, kernels, frequencies, r2=0.95, select=True):
     coefficient of determiniation is >= ``r2``.
 
     """
-    filtered = np.dstack(nd.convolve(image, kernel, mode='wrap')
+    filtered = np.dstack(nd.convolve(image, kernel)
                          for kernel in kernels)
     if not select:
         return filtered, frequencies
@@ -110,18 +113,25 @@ def get_freqs(img):
     frequencies =  list((np.sqrt(2) * float(2 ** i)) / n_cols
                         for i in range(n_freqs))
 
-    # only keep 5 highest frequencies
-    return frequencies[-5:]
+    return frequencies
 
 
-def segment_textures(img, model):
-    frequencies = get_freqs(img)
-    thetas = np.deg2rad([0, 45, 90, 135])
-    kernels, all_freqs = make_filter_bank(frequencies, thetas)
+def segment_textures(img, model, freqs=None, thetas=None, select=True, k=4, coord=1):
+    if freqs is None:
+        freqs = get_freqs(img)[-5:]
+    if thetas is None:
+        thetas = np.deg2rad([0, 45, 90, 135])
+    kernels, all_freqs = make_filter_bank(freqs, thetas)
     kernels = list(np.real(k) for k in kernels)
-    filtered, all_freqs = filter_image(img, kernels, all_freqs, select=True)
+    print 'filtering'
+    filtered, all_freqs = filter_image(img, kernels, all_freqs, select=select)
+    print 'computing features'
     features = compute_features(filtered, all_freqs)
-    features = add_coordinates(features)
+    features = add_coordinates(features, spatial_importance=coord)
     n_feats = features.shape[-1]
-    model.fit(features.reshape(-1, n_feats))
+    print 'clustering'
+    X = features.reshape(-1, n_feats)
+    pca = PCA(k)
+    X = pca.fit_transform(X)
+    model.fit(X)
     return model.labels_.reshape(img.shape)

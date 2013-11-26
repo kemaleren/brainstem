@@ -96,16 +96,17 @@ def make_grey(img):
     return (img - img.min()) / (img.max() - img.min())
 
 
-def get_cutout(filename):
+def get_cutout(filename, rlevel=1):
     """read an image, cropping out the background"""
     # find bounding box of brain in a slice
     small_img = read_img(filename, rlevel=4)
     small_img = make_grey(small_img)
     blurred = ndimage.gaussian_filter(small_img, 10)
-    slc = ndimage.measurements.find_objects(blurred > threshold_otsu(blurred))[0]
-    x_slc = slice(slc[0].start * 2 ** 3, slc[0].stop * 2 ** 3)
-    y_slc = slice(slc[1].start * 2 ** 3, slc[1].stop * 2 ** 3)
-    img = read_img(filename, rlevel=1)
+    slc = ndimage.measurements.find_objects(blurred < threshold_otsu(blurred))[0]
+    k = 4 - rlevel
+    x_slc = slice(slc[0].start * 2 ** k, slc[0].stop * 2 ** k)
+    y_slc = slice(slc[1].start * 2 ** k, slc[1].stop * 2 ** k)
+    img = read_img(filename, rlevel=rlevel)
     cutout = img[x_slc, y_slc]
     del img
     return cutout
