@@ -8,7 +8,6 @@ from __future__ import division
 
 import numpy as np
 from scipy.signal import fftconvolve
-from scipy import ndimage as nd
 
 from skimage.filter import gabor_kernel
 from skimage.filter import gaussian_filter
@@ -22,7 +21,7 @@ def _compute_sigmas(frequency, freq_band=1, angular_band=np.deg2rad(45)):
     return sigma_x, sigma_y
 
 
-def make_filter_bank(frequencies, thetas):
+def make_filter_bank(frequencies, thetas, real=True):
     """prepare filter bank of kernels"""
     # TODO: set MTF of each filter at (u, v) to 0
     kernels = []
@@ -34,18 +33,28 @@ def make_filter_bank(frequencies, thetas):
                                   bandwidth=1)
             kernels.append(kernel)
             all_freqs.append(frequency)
+    if real:
+        kernels = list(np.real(k) for k in kernels)
     return kernels, np.array(all_freqs)
 
 
-def filter_image(image, kernels, frequencies, r2=0.95, select=True):
+def filter_image(image, kernels, frequencies, crop=True, select=True, r2=0.95):
     """Computes all convolutions and discards some filtered images.
 
     Returns filtered images with the largest energies so that the
     coefficient of determiniation is >= ``r2``.
 
     """
-    filtered = np.dstack(nd.convolve(image, kernel)
+    filtered = np.dstack(fftconvolve(image, kernel, 'same')
                          for kernel in kernels)
+
+    if crop:
+        x = max(k.shape[0] for k in kernels)
+        y = max(k.shape[1] for k in kernels)
+        x = int(np.ceil(x / 2))
+        y = int(np.ceil(y / 2))
+        filtered = filtered[x:-x, y:-y]
+
     if not select:
         return filtered, frequencies
     energies = filtered.sum(axis=0).sum(axis=0)
@@ -127,7 +136,6 @@ def segment_textures(img, model, freqs=None, thetas=None, n_thetas=4, select=Tru
     if thetas is None:
         thetas = np.deg2rad(np.arange(0, 180, 180.0 / n_thetas))
     kernels, all_freqs = make_filter_bank(freqs, thetas)
-    kernels = list(np.real(k) for k in kernels)
     filtered, all_freqs = filter_image(img, kernels, all_freqs, select=select)
     features = compute_features(filtered, all_freqs)
     features = add_coordinates(features, spatial_importance=coord)
@@ -155,7 +163,6 @@ def directionality_filter(img, freqs=None, thetas=None):
     thetas = np.deg2rad(np.arange(0, 180, 10))
 
     kernels, all_freqs = make_filter_bank(freqs[-5:-2], thetas)
-    kernels = list(np.real(k) for k in kernels)
     filtered, all_freqs = filter_image(img, kernels, all_freqs, select=False)
     f2 = np.power(filtered, 2)
 
