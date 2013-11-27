@@ -85,7 +85,7 @@ def compute_features(filtered, frequencies,
 
 
 def add_coordinates(features, spatial_importance=1.0):
-    """Adds coordinates to each feature vector and normalizes."""
+    """Adds coordinates to each feature vector and standardizes each feature."""
     n_rows, n_cols = features.shape[:2]
     coords = np.mgrid[:n_rows, :n_cols].swapaxes(0, 2).swapaxes(0, 1)
     features = np.dstack((features, coords))
@@ -103,6 +103,11 @@ def add_coordinates(features, spatial_importance=1.0):
 
 
 def get_freqs(img):
+    """Compute the appropriate frequencies for an image of the given shape.
+
+    Frequencies are given in cycles/pixel.
+
+    """
     n_cols = img.shape[1]
     next_pow2 = 2 ** int(np.ceil(np.log2(n_cols)))
     min_freq = next_pow2 / 4
@@ -112,26 +117,70 @@ def get_freqs(img):
     # we need cycles per pixel, so divide by image width
     frequencies =  list((np.sqrt(2) * float(2 ** i)) / n_cols
                         for i in range(n_freqs))
-
     return frequencies
 
 
-def segment_textures(img, model, freqs=None, thetas=None, select=True, k=4, coord=1):
+def segment_textures(img, model, freqs=None, thetas=None, n_thetas=4, select=True, k=4, coord=1):
+    """Segments textures using Gabor filters and k-means."""
     if freqs is None:
         freqs = get_freqs(img)[-5:]
     if thetas is None:
-        thetas = np.deg2rad([0, 45, 90, 135])
+        thetas = np.deg2rad(np.arange(0, 180, 180.0 / n_thetas))
     kernels, all_freqs = make_filter_bank(freqs, thetas)
     kernels = list(np.real(k) for k in kernels)
-    print 'filtering'
     filtered, all_freqs = filter_image(img, kernels, all_freqs, select=select)
-    print 'computing features'
     features = compute_features(filtered, all_freqs)
     features = add_coordinates(features, spatial_importance=coord)
     n_feats = features.shape[-1]
-    print 'clustering'
     X = features.reshape(-1, n_feats)
     pca = PCA(k)
     X = pca.fit_transform(X)
     model.fit(X)
     return model.labels_.reshape(img.shape)
+
+
+def directionality_filter(img, freqs=None, thetas=None):
+    """
+    Finds the maximum filter response for each pixel.
+
+    Returns the maximum filter response and the angle of maximum response.
+
+    """
+    if freqs is None:
+        freqs = get_freqs(img)[-5:]
+    if thetas is None:
+        thetas = np.deg2rad([0, 45, 90, 135])
+
+    freqs = get_freqs(img)
+    thetas = np.deg2rad(np.arange(0, 180, 10))
+
+    kernels, all_freqs = make_filter_bank(freqs[-5:-2], thetas)
+    kernels = list(np.real(k) for k in kernels)
+    filtered, all_freqs = filter_image(img, kernels, all_freqs, select=False)
+    f2 = np.power(filtered, 2)
+
+    n_thetas = len(thetas)
+    f2_angles = np.dstack(f2[:, :, i::n_thetas].sum(axis=2)
+                          for i in range(n_thetas))
+
+    max_angle_idx = np.argmax(f2_angles, axis=2)
+    x, y = np.indices(max_angle_idx.shape)
+    f2_maxes = f2[x, y, max_angle_idx]
+    magnitude = f2_maxes / f2.mean(axis=2)
+
+    max_thetas = np.rad2deg(np.array(thetas))[max_angle_idx]
+    return magnitude, max_thetas
+
+
+def scale(arr):
+    """scale array to [0, 1]"""
+    return (arr - arr.min()) / arr.max()
+
+
+def make_hsv(magnitude, angle):
+    magnitude = scale(magnitude)
+    angle = scale(angle)
+    h = angle
+    s = magnitude
+    v = np.ones(h.shape)
+    return np.dstack([h, s, v])
