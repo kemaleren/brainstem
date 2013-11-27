@@ -147,7 +147,7 @@ def segment_textures(img, model, freqs=None, thetas=None, n_thetas=4, select=Tru
     return model.labels_.reshape(img.shape)
 
 
-def directionality_filter(img, freqs=None, thetas=None):
+def directionality_filter(img, freqs=None, thetas=None, n_thetas=18):
     """
     Finds the maximum filter response for each pixel.
 
@@ -155,9 +155,9 @@ def directionality_filter(img, freqs=None, thetas=None):
 
     """
     if freqs is None:
-        freqs = get_freqs(img)[-5:]
+        freqs = get_freqs(img)[-5:-2]
     if thetas is None:
-        thetas = np.deg2rad([0, 45, 90, 135])
+        thetas = np.deg2rad(np.arange(0, 180, 180.0 / n_thetas))
 
     freqs = get_freqs(img)
     thetas = np.deg2rad(np.arange(0, 180, 10))
