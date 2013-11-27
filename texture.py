@@ -162,7 +162,7 @@ def directionality_filter(img, freqs=None, thetas=None):
     freqs = get_freqs(img)
     thetas = np.deg2rad(np.arange(0, 180, 10))
 
-    kernels, all_freqs = make_filter_bank(freqs[-5:-2], thetas)
+    kernels, all_freqs = make_filter_bank(freqs, thetas)
     filtered, all_freqs = filter_image(img, kernels, all_freqs, select=False)
     f2 = np.power(filtered, 2)
 
@@ -185,6 +185,7 @@ def scale(arr):
 
 
 def make_hsv(magnitude, angle):
+    """Convert the result of ``directionality_filter`` to an HSV image"""
     magnitude = scale(magnitude)
     angle = scale(angle)
     h = angle
