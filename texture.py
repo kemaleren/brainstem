@@ -120,7 +120,7 @@ def get_freqs(img):
     n_cols = img.shape[1]
     next_pow2 = 2 ** int(np.ceil(np.log2(n_cols)))
     min_freq = next_pow2 / 4
-    n_freqs = int(np.log2(min_freq)) + 2
+    n_freqs = int(np.log2(min_freq))
 
     # note: paper gives frequency in cycles per image width.
     # we need cycles per pixel, so divide by image width
@@ -132,7 +132,7 @@ def get_freqs(img):
 def segment_textures(img, model, freqs=None, thetas=None, n_thetas=4, select=True, k=4, coord=1):
     """Segments textures using Gabor filters and k-means."""
     if freqs is None:
-        freqs = get_freqs(img)[-5:]
+        freqs = get_freqs(img)[-4:]
     if thetas is None:
         thetas = np.deg2rad(np.arange(0, 180, 180.0 / n_thetas))
     kernels, all_freqs = make_filter_bank(freqs, thetas)
@@ -155,12 +155,9 @@ def directionality_filter(img, freqs=None, thetas=None, n_thetas=18):
 
     """
     if freqs is None:
-        freqs = get_freqs(img)[-5:-2]
+        freqs = get_freqs(img)[-4:]
     if thetas is None:
         thetas = np.deg2rad(np.arange(0, 180, 180.0 / n_thetas))
-
-    freqs = get_freqs(img)
-    thetas = np.deg2rad(np.arange(0, 180, 10))
 
     kernels, all_freqs = make_filter_bank(freqs, thetas)
     filtered, all_freqs = filter_image(img, kernels, all_freqs, select=False)
