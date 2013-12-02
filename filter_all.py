@@ -1,26 +1,25 @@
 import os
 
+import numpy as np
 from matplotlib import pyplot as pp
 from skimage.color import hsv2rgb
 
 import texture as t
 import brainstem as b
 
-RESULTS = os.path.expanduser("~/devel/results/directionality")
-if not os.path.exists(RESULTS):
-    os.mkdir(RESULTS)
+RESULTS = os.path.expanduser("~/devel/results/filtered")
 
 NAMES = b.get_filenames()
 N_NAMES = len(NAMES)
+ANGLE = 20
 
 for i, name in enumerate(NAMES):
     print 'processing {} of {}: {}'.format(i, N_NAMES, name)
     img = b.get_cutout(name, rlevel=3)
     img = b.make_grey(img)
-    magnitude, max_angles = t.directionality_filter(img)
-    hsv_img = t.make_hsv(magnitude, max_angles)
+    filtered, _ = t.filter_img(img, angle=ANGLE)
 
-    result_file = os.path.splitext(name)[0] + "_directionality.png"
-    result_path = os.path.join(RESULTS, result_file)
-    pp.imsave(result_path, hsv2rgb(hsv_img))
+    filter_file = os.path.splitext(name)[0] + "_filtered.npy"
+    filter_path = os.path.join(RESULTS, filter_file)
+    np.save(filter_path, filtered)
     
