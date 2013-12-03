@@ -42,7 +42,7 @@ def make_filter_bank(frequencies, thetas, real=True):
     return kernels, np.array(kernel_freqs)
 
 
-def get_freqs(img):
+def get_freqs(img, n=4):
     """Compute the appropriate frequencies for an image of the given shape.
 
     Frequencies are given in cycles/pixel.
@@ -50,20 +50,20 @@ def get_freqs(img):
     """
     n_cols = img.shape[1]
     next_pow2 = 2 ** int(np.ceil(np.log2(n_cols)))
-    min_freq = next_pow2 / 4
-    n_freqs = int(np.log2(min_freq))
+    max_freq = next_pow2 / 4
+    n_freqs = int(np.log2(max_freq))
 
     # note: paper gives frequency in cycles per image width.
     # we need cycles per pixel, so divide by image width
     frequencies =  list((np.sqrt(2) * float(2 ** i)) / n_cols
-                        for i in range(n_freqs))
+                        for i in range(max(0, n_freqs - n), n_freqs))
     return frequencies
 
 
 def filter_img(img, freqs=None, angle=10, crop=True):
     """create filter bank and filter image"""
     if freqs is None:
-        freqs = get_freqs(img)[-4:]
+        freqs = get_freqs(img)
     thetas = np.deg2rad(np.arange(0, 180, angle))
     kernels, kernel_freqs = make_filter_bank(freqs, thetas)
     filtered = np.dstack(fftconvolve(img, kernel, 'same')
