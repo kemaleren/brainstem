@@ -16,13 +16,17 @@ from sklearn.decomposition import PCA
 
 
 def _compute_sigmas(frequency, freq_band=1, angular_band=np.deg2rad(45)):
+    """Taken from "Designing Gabor filters for optimal texture
+    separability", (Clausi and Jernigan, 2000).
+
+    """
     sigma_x = np.sqrt(np.log(2)) * (2 ** freq_band + 1) / (np.sqrt(2) * np.pi * frequency * (2 ** freq_band - 1))
     sigma_y = np.sqrt(np.log(2)) / (np.sqrt(2) * np.pi * frequency * np.tan(angular_band / 2))
     return sigma_x, sigma_y
 
 
 def make_filter_bank(frequencies, thetas, real=True):
-    """prepare filter bank of kernels"""
+    """prepare filter bank of Gabor kernels"""
     # TODO: set MTF of each filter at (u, v) to 0
     kernels = []
     kernel_freqs = []
@@ -57,6 +61,7 @@ def get_freqs(img):
 
 
 def filter_img(img, freqs=None, angle=10, crop=True):
+    """create filter bank and filter image"""
     if freqs is None:
         freqs = get_freqs(img)[-4:]
     thetas = np.deg2rad(np.arange(0, 180, angle))
@@ -149,25 +154,38 @@ def segment_textures(img, model, freqs=None, angle=10, select=True, k=4, coord=1
     return model.labels_.reshape(img.shape)
 
 
-def directionality_filter(filtered, angle=10):
+def directionality_filter(filtered, angle=10, combine=True):
     """
     Finds the maximum filter response for each pixel.
 
     Returns the maximum filter response and the angle of maximum response.
 
     """
-    f2 = np.abs(filtered)
+    # TODO: when combine=True, this is using a lot of memory
+    f2 = np.power(filtered, 2)
 
     n_angles = int(180 / angle)
-    f2_angles = np.dstack(f2[:, :, i::n_angles].sum(axis=2)
-                          for i in range(n_angles))
+    n_freqs = int(filtered.shape[2] / n_angles)
 
-    max_angle_idx = np.argmax(f2_angles, axis=2)
-    x, y = np.indices(max_angle_idx.shape)
-    f2_maxes = f2[x, y, max_angle_idx]
-    magnitude = f2_maxes / f2.mean(axis=2)
+    if combine:
+        f2_combined = np.dstack(f2[:, :, i::n_angles].sum(axis=2)
+                                for i in range(n_angles))
+        max_angle_idx = np.argmax(f2_combined, axis=2)
+        x, y = np.indices(max_angle_idx.shape)
+        magnitude = f2[x, y, max_angle_idx]
 
-    max_angles = np.rad2deg(np.array(f2_angles))[max_angle_idx]
+        angles = np.arange(0, 180, angle)
+        max_angles = angles[max_angle_idx]
+    else:
+        angles = np.hstack(list(np.arange(0, 180, angle)
+                                for f in range(n_freqs)))
+        idx = np.argmax(filtered, axis=2)
+        x, y = np.indices(idx.shape)
+        magnitude = f2[x, y, idx]
+
+        max_angles = angles[idx]
+
+    magnitude = magnitude / np.mean(f2, axis=2)
     return magnitude, max_angles
 
 
