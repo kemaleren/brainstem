@@ -161,7 +161,6 @@ def directionality_filter(filtered, angle=10, combine=True):
     Returns the maximum filter response and the angle of maximum response.
 
     """
-    # TODO: when combine=True, this is using a lot of memory
     f2 = np.power(filtered, 2)
 
     n_angles = int(180 / angle)
