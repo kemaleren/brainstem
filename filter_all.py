@@ -2,7 +2,6 @@ import os
 
 import numpy as np
 from matplotlib import pyplot as pp
-from skimage.color import hsv2rgb
 
 import texture as t
 import brainstem as b
