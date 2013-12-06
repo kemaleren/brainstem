@@ -9,8 +9,11 @@ from __future__ import division
 import numpy as np
 from scipy.signal import fftconvolve
 
+from skimage import img_as_float
 from skimage.filter import gabor_kernel
 from skimage.filter import gaussian_filter
+from skimage.color import hsv2rgb
+from skimage.color import gray2rgb
 
 from sklearn.decomposition import PCA
 
@@ -193,11 +196,22 @@ def scale(arr):
     return (arr - arr.min()) / arr.max()
 
 
-def make_hsv(magnitude, angle):
-    """Convert the result of ``directionality_filter`` to an HSV image"""
+def make_hsv(magnitude, angle, img=None, alpha=0.5):
+    """Convert the result of ``directionality_filter`` to an HSV
+    image, then convert to RGB."""
     magnitude = scale(magnitude)
     angle = scale(angle)
     h = angle
     s = magnitude
     v = np.ones(h.shape)
-    return np.dstack([h, s, v])
+    hsv = hsv2rgb(np.dstack([h, s, v]))
+    if img is None:
+        return hsv
+    # probably need to crop
+    x1, y1 = img.shape
+    x2, y2 = angle.shape
+    mx = (x1 - x2) / 2
+    my = (y1 - y2) / 2
+    img = scale(img[mx:-mx, my:-my])
+    result = hsv + gray2rgb(img)
+    return img_as_float(result)
