@@ -74,7 +74,7 @@ def _read_jp2_img(filename, rlevel):
     return jpimg.read(rlevel=rlevel)
 
 
-def read_img(filename, rlevel):
+def get_img(filename, rlevel):
     """get an image, using the cache if available."""
     try:
         fname = CACHE[(filename, rlevel)]
@@ -99,13 +99,13 @@ def make_grey(img):
 def get_cutout(filename, rlevel=1, margin=100):
     """read an image, cropping out the background"""
     # find bounding box of brain in a slice
-    small_img = read_img(filename, rlevel=4)
+    small_img = get_img(filename, rlevel=4)
     small_img = make_grey(small_img)
     blurred = ndimage.gaussian_filter(small_img, 10)
     slc = ndimage.measurements.find_objects(blurred < threshold_otsu(blurred))[0]
     k = 4 - rlevel
 
-    img = read_img(filename, rlevel=rlevel)
+    img = get_img(filename, rlevel=rlevel)
     xstart = max(slc[0].start * 2 ** k - margin, 0)
     xstop = min(slc[0].stop * 2 ** k + margin, img.shape[0])
     ystart = max(slc[1].start * 2 ** k - margin, 0)
@@ -131,10 +131,10 @@ def random_image_sample(img, scale=5):
                y_start : y_start + y_shape]
 
 
-def sample_many(filenames, scale=5):
+def sample_many(filenames, rlevel=1, scale=5):
     result = []
     for f in filenames:
-        img = get_cutout(f)
+        img = get_cutout(f, rlevel=rlevel)
         sample = random_image_sample(img, scale).copy()
         del img
         result.append(sample)
@@ -147,6 +147,8 @@ def segment_cells(img):
     Returns the labeled image and the number of labels.
 
     """
+    if img.ndim == 3 and img.shape[-1] > 1:
+        img = make_grey(img)
     # # global threshold and watershed
     # binary = img < threshold_otsu(img)
     # distance = ndimage.distance_transform_edt(binary)
@@ -155,7 +157,6 @@ def segment_cells(img):
     # labels = watershed(-distance, markers, mask=binary)
 
     # local threshold and erosion / dilation
-    img = make_grey(img)
     t_img = threshold_adaptive(img, 25, offset=.01)
     b_img = binary_erosion(-t_img, np.ones((3, 3)))
     d_img = binary_dilation(b_img, np.ones((3, 3)))
@@ -201,7 +202,12 @@ def all_object_features(imgs, feature_names=None):
         feature_names=FEATURE_NAMES
     features = list(object_features(img, feature_names)
                     for img in imgs)
-    return np.vstack(features)
+    # normalize
+    features = np.vstack(features)
+    means = features.mean(axis=0)
+    stds = features.std(axis=0, ddof=1)
+    features = (features - means) / stds
+    return features 
 
 
 def split_labels(imgs, labels, n_objects=None):
