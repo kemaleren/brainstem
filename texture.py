@@ -196,6 +196,20 @@ def scale(arr):
     return (arr - arr.min()) / arr.max()
 
 
+def crop_to(img, shape):
+    """crop ``img`` to ``shape``"""
+    x1, y1 = img.shape
+    x2, y2 = shape
+    if x1 == x2 and y1 == y2:
+        return img
+    if x2 > x1 or y2 > y1:
+        raise Exception('cannot crop image of shape {}'
+                        ' to shape {}'.format(img, shape))
+    mx = int((x1 - x2) / 2)
+    my = int((y1 - y2) / 2)
+    return img[mx:-mx, my:-my]
+
+
 def make_hsv(magnitude, angle, img=None, alpha=0.5):
     """Convert the result of ``directionality_filter`` to an HSV
     image, then convert to RGB."""
@@ -207,11 +221,6 @@ def make_hsv(magnitude, angle, img=None, alpha=0.5):
     hsv = hsv2rgb(np.dstack([h, s, v]))
     if img is None:
         return hsv
-    # probably need to crop
-    x1, y1 = img.shape
-    x2, y2 = angle.shape
-    mx = (x1 - x2) / 2
-    my = (y1 - y2) / 2
-    img = scale(img[mx:-mx, my:-my])
+    img = scale(crop_to(img, angle.shape))
     result = hsv + gray2rgb(img)
     return img_as_float(result)
