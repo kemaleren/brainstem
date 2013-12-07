@@ -3,15 +3,11 @@ Brainstem project
 
 Some useful code for the brainstem project. Parts of this project will be incorporated into [this project](https://github.com/mistycheney/registration).
 
-Before using it, it is necessary to build the Cython modules in place:
-
-    python setup.py build_ext --inplace
-
-Right now there are two modules. The first reads images, thresholds them, and clusters objects found by thresholding. It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
+Right now there are three main modules. The first reads images, thresholds them, and clusters objects found by thresholding. It also optionally caches files as TIFs, which take up more space than JPEG2000 but are faster to read. Here is an example of how to use it:
 
 ```python
 import brainstem as b
-from sklearn.decomposition import RandomizedPCA
+from sklearn.decomposition import PCA
 from sklearn.cluster import MiniBatchKMeans
 from matplotlib import pyplot as pp
 
@@ -30,7 +26,7 @@ model = MiniBatchKMeans()
 model.fit(X)
 
 # visualize results, projecting onto first two principal components
-pca = RandomizedPCA(2)
+pca = PCA(2)
 Xp = pca.fit_transform(X)
 pp.figure()
 pp.scatter(Xp[:, 0], Xp[:, 1], c=model.labels_, s=30)
@@ -45,7 +41,11 @@ pp.imshow(clustered_img)
 
 You will have to modify ``brainstem.DATADIR`` to point to a directory containing jp2 files. If you do not want the caching functionality, set ``brainstem.USE_CACHE = False``.
 
-The second module implements shape context descriptors, shape distance metrics via dynamic programming, and context-sensitive shape similarity via graph transduction. Here is an example of how to use it:
+The second module implements shape context descriptors, shape distance metrics via dynamic programming, and context-sensitive shape similarity via graph transduction. Before using it, it is necessary to build the Cython modules in place:
+
+    python setup.py build_ext --inplace
+
+Here is an example of how to use it:
 
 ```python
 import skimage.data
@@ -65,3 +65,5 @@ legless[200:, 200:] = 0
 sc.full_shape_distance(binary_img, legless)
 
 ```
+
+Finally, the third module, "texture.py", implementes filtering with Gabor filters, filter visualization, and texture segmentation.
